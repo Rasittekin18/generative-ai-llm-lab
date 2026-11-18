@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LectureMind — Ders, Seminer &amp; Video Bilgi Çıkarım Stüdyosu</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Sol Kenar Çubuğu: Kütüphane -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">LM</div>
+        <div>
+          <h1>LectureMind</h1>
+          <p class="brand-sub">Video &amp; Ders Bilgi Stüdyosu</p>
+        </div>
+      </div>
+
+      <div id="system-badge" class="system-badge">Sistem durumu yükleniyor...</div>
+
+      <div class="sidebar-header">
+        <span>Kütüphane</span>
+        <button id="refresh-btn" class="icon-btn" title="Listeyi Yenile">↻</button>
+      </div>
+
+      <div id="lecture-list" class="lecture-list">
+        <div class="empty-hint">Henüz analiz edilmiş ders yok.</div>
+      </div>
+    </aside>
+
+    <!-- Ana İçerik -->
+    <main class="main-area">
+      <!-- Medya Ekleme Paneli -->
+      <section class="ingest-card">
+        <div class="ingest-tabs">
+          <button class="ingest-tab active" data-mode="url">Web / YouTube Bağlantısı</button>
+          <button class="ingest-tab" data-mode="upload">Yerel Ses / Video Dosyası</button>
+        </div>
+
+        <form id="url-form" class="ingest-form">
+          <input
+            id="url-input"
+            type="url"
+            placeholder="YouTube, Vimeo, TED veya desteklenen herhangi bir video/ses linkini yapıştırın..."
+            required
+          />
+          <select id="url-lang" title="Konuşma Dili">
+            <option value="auto">Dil: Otomatik</option>
+            <option value="tr">Türkçe (TR)</option>
+            <option value="en">İngilizce (EN)</option>
+          </select>
+          <select id="url-model" title="Whisper Model Boyutu">
+            <option value="small" selected>Model: small (Dengeli)</option>
+            <option value="base">Model: base (Hızlı)</option>
+            <option value="tiny">Model: tiny (Çok Hızlı)</option>
+            <option value="medium">Model: medium (Yüksek Kalite)</option>
+          </select>
+          <button type="submit" class="primary-btn">Analiz Et</button>
+        </form>
+
+        <form id="upload-form" class="ingest-form hidden">
+          <input
+            id="file-input"
+            type="file"
+            accept=".mp3,.mp4,.wav,.m4a,.webm,.mkv,.ogg,.flac,.avi"
+            required
+          />
+          <select id="file-lang" title="Konuşma Dili">
+            <option value="auto">Dil: Otomatik</option>
+            <option value="tr">Türkçe (TR)</option>
+            <option value="en">İngilizce (EN)</option>
+          </select>
+          <select id="file-model" title="Whisper Model Boyutu">
+            <option value="small" selected>Model: small (Dengeli)</option>
+            <option value="base">Model: base (Hızlı)</option>
+            <option value="tiny">Model: tiny (Çok Hızlı)</option>
+            <option value="medium">Model: medium (Yüksek Kalite)</option>
+          </select>
+          <button type="submit" class="primary-btn">Yükle &amp; Analiz Et</button>
+        </form>
+      </section>
+
+      <!-- Boş Durum -->
+      <section id="empty-state" class="empty-workspace">
+        <div class="empty-card">
+          <h2>Ders veya Seminerinizi Anında Bilgiye Dönüştürün</h2>
+          <p>
+            Yukarıya bir <strong>YouTube / web video linki</strong> yapıştırın veya bilgisayarınızdan bir
+            <strong>ders kaydı</strong> yükleyin. LectureMind:
+          </p>
+          <ul>
+            <li><strong>Faster-Whisper</strong> ile zaman damgalı yüksek doğruluklu transkript çıkarır,</li>
+            <li><strong>Çok dilli semantik vektörlerle</strong> videoyu otomatik konu başlıklarına böler,</li>
+            <li><strong>Sınav, ödev ve kritik noktaları</strong> ayrı bir çalışma listesinde toplar,</li>
+            <li><strong>Hibrit Arama (BM25 + Vektör)</strong> ile sorduğunuz sorunun geçtiği saniyeye atlar.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Aktif Ders Çalışma Alanı -->
+      <section id="workspace" class="workspace hidden">
+        <div class="lecture-header">
+          <div>
+            <h2 id="lecture-title">Ders Başlığı</h2>
+            <div id="lecture-meta" class="meta-row"></div>
+          </div>
+          <div class="export-actions">
+            <a id="export-md" class="secondary-btn" target="_blank">Notları İndir (.md)</a>
+            <a id="export-txt" class="secondary-btn" target="_blank">Transkript (.txt)</a>
+            <a id="export-srt" class="secondary-btn" target="_blank">Altyazı (.srt)</a>
+          </div>
+        </div>
+
+        <!-- İlerleme Çubuğu -->
+        <div id="progress-panel" class="progress-panel hidden">
+          <div class="progress-top">
+            <span id="progress-label">İşleniyor...</span>
+            <span id="progress-pct">0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="progress-bar" class="progress-bar"></div>
+          </div>
+          <p id="error-box" class="error-box hidden"></p>
+        </div>
+
+        <!-- Oynatıcı + İçerik Izgarası -->
+        <div id="studio-grid" class="studio-grid hidden">
+          <!-- Sol Kolon: Akıllı Oynatıcı & Hızlı Bölümler -->
+          <div class="player-col">
+            <div class="player-box">
+              <div id="yt-container" class="yt-container hidden">
+                <iframe
+                  id="yt-frame"
+                  src=""
+                  title="YouTube video player"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowfullscreen
+                ></iframe>
+              </div>
+              <div id="audio-container" class="audio-container hidden">
+                <audio id="audio-player" controls preload="metadata"></audio>
+              </div>
+              <div id="player-mode-bar" class="player-mode-bar hidden">
+                <span class="hint-text">Zaman damgalarına tıklayarak ilgili saniyeye atlayabilirsiniz.</span>
+                <button id="toggle-audio-btn" class="link-btn">Ses oynatıcıya geç</button>
+              </div>
+            </div>
+
+            <div class="card compact-card">
+              <h3>Genel Ders Özeti</h3>
+              <div id="overview-content" class="overview-content"></div>
+            </div>
+          </div>
+
+          <!-- Sağ Kolon: 4 Sekmeli Çalışma Alanı -->
+          <div class="study-col">
+            <div class="study-tabs">
+              <button class="study-tab active" data-tab="tab-qa">Soru-Cevap (RAG)</button>
+              <button class="study-tab" data-tab="tab-chapters">Konu Bölümleri</button>
+              <button class="study-tab" data-tab="tab-highlights">Sınav &amp; Ödev</button>
+              <button class="study-tab" data-tab="tab-transcript">Transkript &amp; Arama</button>
+            </div>
+
+            <!-- Sekme 1: Zaman Damgalı Soru-Cevap -->
+            <div id="tab-qa" class="tab-panel active">
+              <form id="qa-form" class="qa-form">
+                <input
+                  id="qa-input"
+                  type="text"
+                  placeholder="Örn: Hoca attention mekanizmasından kaçıncı dakikada bahsetti?"
+                  required
+                />
+                <button type="submit" class="primary-btn">Sor</button>
+              </form>
+              <div class="quick-prompts">
+                <button type="button" class="chip" data-q="Bu derste anlatılan temel kavramlar nelerdir?">Temel kavramlar neler?</button>
+                <button type="button" class="chip" data-q="Sınav, vize veya ödev hakkında neler söylendi?">Sınav / ödev bilgisi var mı?</button>
+                <button type="button" class="chip" data-q="Dersin ana sonucu ve önerilen yöntem nedir?">Ana sonuç nedir?</button>
+              </div>
+              <div id="qa-feed" class="qa-feed"></div>
+            </div>
+
+            <!-- Sekme 2: Konu Bölümleri -->
+            <div id="tab-chapters" class="tab-panel">
+              <div id="chapters-list" class="chapters-list"></div>
+            </div>
+
+            <!-- Sekme 3: Sınav, Ödev & Kritik Notlar -->
+            <div id="tab-highlights" class="tab-panel">
+              <div id="highlights-content" class="highlights-content"></div>
+            </div>
+
+            <!-- Sekme 4: Tam Transkript & Hibrit Arama -->
+            <div id="tab-transcript" class="tab-panel">
+              <form id="search-form" class="qa-form">
+                <input
+                  id="search-input"
+                  type="text"
+                  placeholder="Semantik + anahtar kelime araması yap (örn: gradient descent, ödev teslimi)..."
+                />
+                <button type="submit" class="secondary-btn">Ara</button>
+                <button type="button" id="clear-search-btn" class="secondary-btn hidden">Temizle</button>
+              </form>
+              <div id="search-results" class="search-results hidden"></div>
+              <div id="transcript-list" class="transcript-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

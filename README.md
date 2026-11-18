@@ -7,6 +7,7 @@
 ![Hugging Face](https://img.shields.io/badge/Hugging%20Face-Transformers-yellow?logo=huggingface&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-red?logo=pytorch&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-Agents-purple)
+![FastAPI](https://img.shields.io/badge/FastAPI-RAG%20Apps-009688?logo=fastapi&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-teal)
 
 <br/>
@@ -38,6 +39,7 @@ Tüm projeler kendi alt klasörlerinde modüler yapısını, kaynak kodlarını 
 | 04 | **Generative AI Master Handbook** | LLM iş akışları, RAG konseptleri, Chatbot geliştirme adımları ve Görme-Dil Modelleri (Vision-Language Models - VLM). | PyTorch, LLMs, Multimodal AI | [`/Generative_AI`](./Generative_AI) |
 | 05 | **Comprehensive NLP Fundamentals** | Tokenization, Stemming, Lemmatization, POS Tagging, Word2Vec, GloVe, Nöral Makine Çevirisi (NMT) ve Görsel Başlıklandırma (Image Captioning). | NLTK, spaCy, Gensim, PyTorch | [`/Natural-Language-Processing-NLP-`](./Natural-Language-Processing-NLP-) |
 | 06 | **IMDB Sentiment Analysis** | Film incelemeleri üzerinde metin ön işleme, vektörleştirme ve sınıflandırma modelleriyle duygu analizi. | Scikit-Learn, NLTK, Python | [`/IMDB-Sentiment-Analysis`](./IMDB-Sentiment-Analysis) |
+| 07 | **LectureMind — Video & Ders Bilgi Stüdyosu** | YouTube/web bağlantıları ve yerel ders kayıtlarından zaman damgalı transkript, semantik konu bölümleme, sınav/ödev çıkarımı ve tıklanabilir zaman damgalı Hibrit RAG Soru-Cevap web uygulaması. | FastAPI, Faster-Whisper, Sentence-Transformers, BM25, yt-dlp | [`/LectureMind`](./LectureMind) |
 
 ---
 
@@ -81,6 +83,10 @@ jupyter notebook
 # Örnek: IMDB Duygu Analizini Çalıştırma
 cd IMDB-Sentiment-Analysis
 python IMDB_Sentiment_Analysis.py
+
+# Örnek: LectureMind Web Stüdyosunu Başlatma
+cd LectureMind
+python launch.py
 ```
 
 ---
@@ -91,8 +97,8 @@ python IMDB_Sentiment_Analysis.py
 - **Model Kütüphaneleri & Transformers:** Hugging Face Transformers, Accelerate, PEFT (Parameter-Efficient Fine-Tuning)
 - **Derin Öğrenme Çatısı:** PyTorch
 - **Vektör Veri Tabanları & Geri Çağırma (Retrieval):** FAISS, ChromaDB
-- **Doğal Dil İşleme (NLP):** NLTK, spaCy, Gensim
-- **Arayüz & Dağıtım:** Gradio, Streamlit
+- **Doğal Dil İşleme (NLP) & Ses:** NLTK, spaCy, Gensim, Faster-Whisper, BM25
+- **Arayüz & Dağıtım:** FastAPI, Gradio, Streamlit
 
 ---
 
