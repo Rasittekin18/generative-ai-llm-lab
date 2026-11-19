@@ -40,6 +40,7 @@ Tüm projeler kendi alt klasörlerinde modüler yapısını, kaynak kodlarını 
 | 05 | **Comprehensive NLP Fundamentals** | Tokenization, Stemming, Lemmatization, POS Tagging, Word2Vec, GloVe, Nöral Makine Çevirisi (NMT) ve Görsel Başlıklandırma (Image Captioning). | NLTK, spaCy, Gensim, PyTorch | [`/Natural-Language-Processing-NLP-`](./Natural-Language-Processing-NLP-) |
 | 06 | **IMDB Sentiment Analysis** | Film incelemeleri üzerinde metin ön işleme, vektörleştirme ve sınıflandırma modelleriyle duygu analizi. | Scikit-Learn, NLTK, Python | [`/IMDB-Sentiment-Analysis`](./IMDB-Sentiment-Analysis) |
 | 07 | **LectureMind — Video & Ders Bilgi Stüdyosu** | YouTube/web bağlantıları ve yerel ders kayıtlarından zaman damgalı transkript, semantik konu bölümleme, sınav/ödev çıkarımı ve tıklanabilir zaman damgalı Hibrit RAG Soru-Cevap web uygulaması. | FastAPI, Faster-Whisper, Sentence-Transformers, BM25, yt-dlp | [`/LectureMind`](./LectureMind) |
+| 08 | **ContextLingo — Bağlam Odaklı Masaüstü İngilizce Asistanı** | Windows'taki tüm uygulamalarda (`Alt+Q` / fare seçimi) çalışan, bağlam/deyim açıklamalı çift yönlü (EN↔TR) çeviri, ton seçmeli Yazma & Prompt Koçu (`Alt+W`), yerel Hugging Face NER, SQLite kelime defteri ve QLoRA fine-tuning şablonu. | FastAPI, PySide6, Win32 API, Transformers (NER), QLoRA/PEFT, SQLite | [`/ContextLingo`](./ContextLingo) |
 
 ---
 
@@ -87,6 +88,10 @@ python IMDB_Sentiment_Analysis.py
 # Örnek: LectureMind Web Stüdyosunu Başlatma
 cd LectureMind
 python launch.py
+
+# Örnek: ContextLingo Masaüstü İngilizce Asistanını Başlatma
+cd ContextLingo
+python -B run_app.py
 ```
 
 ---
@@ -98,7 +103,7 @@ python launch.py
 - **Derin Öğrenme Çatısı:** PyTorch
 - **Vektör Veri Tabanları & Geri Çağırma (Retrieval):** FAISS, ChromaDB
 - **Doğal Dil İşleme (NLP) & Ses:** NLTK, spaCy, Gensim, Faster-Whisper, BM25
-- **Arayüz & Dağıtım:** FastAPI, Gradio, Streamlit
+- **Arayüz & Dağıtım:** FastAPI, PySide6 (Windows Masaüstü), Gradio, Streamlit
 
 ---
 

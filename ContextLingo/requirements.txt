@@ -1,0 +1,19 @@
+# Backend & API
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.6.0
+httpx>=0.27.0
+openai>=1.30.0
+python-dotenv>=1.0.1
+
+# Yerel Hugging Face NLP (Bölüm 2 & 3 Modelleri)
+transformers>=4.40.0
+torch>=2.2.0
+sentencepiece>=0.2.0
+
+# Masaüstü Uygulaması (Windows Her Uygulamada Çalışan Arayüz)
+PySide6>=6.7.0
+pynput>=1.7.7
+
+# Test
+pytest>=8.0.0
