@@ -1,0 +1,252 @@
+{
+  "name": "AI-Tech-Telegram-Bulten-OpenAI",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 12,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "id": "c6f5426d-e741-48d1-bf2f-29e806227bc4",
+      "name": "Her Gün 12:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://news.google.com/rss/search?q=yapay+zeka&hl=tr&gl=TR&ceid=TR:tr",
+        "options": {}
+      },
+      "id": "f6fa70b2-67f9-4554-cd1f-b9faf0bf186d",
+      "name": "Türkçe AI Haberleri (RSS)",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "maxItems": 5,
+        "keep": "firstItems"
+      },
+      "id": "a7e6a0e8-60e2-4289-ada0-da8656bf2576",
+      "name": "İlk 5 Haberi Al",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        448,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateIndividualFields",
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "title",
+              "renameField": true,
+              "outputFieldName": "basliklar"
+            },
+            {
+              "fieldToAggregate": "pubDate",
+              "renameField": true,
+              "outputFieldName": "tarihler"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0fb22aa0-a954-4f59-ace3-316f66004c9a",
+      "name": "Başlıkları Birleştir",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        672,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Bugünün tarihi: {{ $now.format(\"dd.MM.yyyy\") }}.\n\nAşağıda Türkiye gündeminden 5 adet yapay zekâ haber başlığı var:\n{{ $json.basliklar.map((b, i) => (i + 1) + \". \" + b).join(\"\\n\") }}\n\nGörevlerin:\n1) Global_AI_Haberleri aracını çağırarak küresel yapay zekâ haberlerini al.\n2) Yukarıdaki Türkçe haberlerden en önemli 3-4 tanesini \"🇹🇷 Türkiye Gündemi\" başlığı altında özetle.\n3) Global_AI_Haberleri aracından gelen haberlerden en önemli 3 tanesini Türkçe'ye çevirip \"🌍 Küresel Gündem\" başlığı altında linkleriyle birlikte yaz.",
+        "options": {
+          "systemMessage": "Sen Türkçe çalışan kişisel Yapay Zekâ ve Teknoloji Bülteni editörüsün.\n\nKesin Kurallar:\n1. Önce mutlaka Global_AI_Haberleri aracını çağır.\n2. Sana verilen Türkiye başlıklarını ASLA atlama; mutlaka \"🇹🇷 Türkiye Gündemi\" bölümüne en önemli 3-4 maddeyi kısa Türkçe özetle yaz.\n3. Global_AI_Haberleri aracından dönen haberlerden en önemli 3 tanesini \"🌍 Küresel Gündem\" bölümüne Türkçe başlık + 1 cümle özet + varsa (url) şeklinde yaz.\n4. Hiçbir haberi veya linki uydurma; sadece verilen ve araçtan dönen verileri kullan.\n5. Mesajın başına \"🤖 Günlük Yapay Zekâ ve Teknoloji Bülteni\" başlığı koy ve toplam uzunluğu 2500 karakterin altında tut."
+        }
+      },
+      "id": "ab7b4cf2-4962-49b2-bcf7-49fcc92f2c86",
+      "name": "AI Bülten Editörü",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        896,
+        112
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-nano",
+          "mode": "list",
+          "cachedResultName": "gpt-5-nano"
+        },
+        "options": {}
+      },
+      "id": "cb5eb1dd-7a99-4087-ce7f-d2e2bd7dd667",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        912,
+        336
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "OpenAI API account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://hn.algolia.com/api/v1/search_by_date?tags=story&query=AI&numericFilters=points>15&hitsPerPage=5",
+        "options": {},
+        "optimizeResponse": true,
+        "responseType": "json",
+        "dataField": "hits",
+        "fieldsToInclude": "selected",
+        "fields": "title,url,created_at"
+      },
+      "id": "72aa5773-65fd-4902-c53a-89b5aa0d3d8a",
+      "name": "Global_AI_Haberleri",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.5,
+      "position": [
+        1040,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.output }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "7cb406ce-b1fd-4656-acde-25f964d7f2a5",
+      "name": "Telegram Bülten Gönder",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1248,
+        112
+      ],
+      "executeOnce": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Her Gün 12:30": {
+      "main": [
+        [
+          {
+            "node": "Türkçe AI Haberleri (RSS)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Türkçe AI Haberleri (RSS)": {
+      "main": [
+        [
+          {
+            "node": "İlk 5 Haberi Al",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "İlk 5 Haberi Al": {
+      "main": [
+        [
+          {
+            "node": "Başlıkları Birleştir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Başlıkları Birleştir": {
+      "main": [
+        [
+          {
+            "node": "AI Bülten Editörü",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Bülten Editörü": {
+      "main": [
+        [
+          {
+            "node": "Telegram Bülten Gönder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Bülten Editörü",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Global_AI_Haberleri": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Bülten Editörü",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul"
+  },
+  "tags": []
+}

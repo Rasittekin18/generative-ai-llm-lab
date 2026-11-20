@@ -8,6 +8,7 @@
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-red?logo=pytorch&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-Agents-purple)
 ![FastAPI](https://img.shields.io/badge/FastAPI-RAG%20Apps-009688?logo=fastapi&logoColor=white)
+![n8n](https://img.shields.io/badge/n8n-AI%20Agents-EA4B71?logo=n8n&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-teal)
 
 <br/>
@@ -41,6 +42,7 @@ Tüm projeler kendi alt klasörlerinde modüler yapısını, kaynak kodlarını 
 | 06 | **IMDB Sentiment Analysis** | Film incelemeleri üzerinde metin ön işleme, vektörleştirme ve sınıflandırma modelleriyle duygu analizi. | Scikit-Learn, NLTK, Python | [`/IMDB-Sentiment-Analysis`](./IMDB-Sentiment-Analysis) |
 | 07 | **LectureMind — Video & Ders Bilgi Stüdyosu** | YouTube/web bağlantıları ve yerel ders kayıtlarından zaman damgalı transkript, semantik konu bölümleme, sınav/ödev çıkarımı ve tıklanabilir zaman damgalı Hibrit RAG Soru-Cevap web uygulaması. | FastAPI, Faster-Whisper, Sentence-Transformers, BM25, yt-dlp | [`/LectureMind`](./LectureMind) |
 | 08 | **ContextLingo — Bağlam Odaklı Masaüstü İngilizce Asistanı** | Windows'taki tüm uygulamalarda (`Alt+Q` / fare seçimi) çalışan, bağlam/deyim açıklamalı çift yönlü (EN↔TR) çeviri, ton seçmeli Yazma & Prompt Koçu (`Alt+W`), yerel Hugging Face NER, SQLite kelime defteri ve QLoRA fine-tuning şablonu. | FastAPI, PySide6, Win32 API, Transformers (NER), QLoRA/PEFT, SQLite | [`/ContextLingo`](./ContextLingo) |
+| 09 | **n8n AI & Tech Telegram Bülteni Ajanı** | Sıfır ek API maliyeti ve sıfır topluluk paketi bağımlılığı ile her gün `12:30`'da Türkiye (Google News RSS) ve küresel (Hacker News AI `points>15`) yapay zekâ haberlerini yerel Ollama (`qwen2.5:3b`) veya OpenAI (`gpt-5-nano`) ile derleyip Telegram'a gönderen otonom n8n Agent iş akışı. | n8n, Ollama (`qwen2.5:3b`), HTTP Request Tool, RSS Read, Telegram Bot API | [`/n8n-AI-News-Telegram-Agent`](./n8n-AI-News-Telegram-Agent) |
 
 ---
 
@@ -92,18 +94,22 @@ python launch.py
 # Örnek: ContextLingo Masaüstü İngilizce Asistanını Başlatma
 cd ContextLingo
 python -B run_app.py
+
+# Örnek: n8n AI & Tech Telegram Bülteni Ajanı için n8n ve Ollama'yı Başlatma
+ollama serve
+n8n   # Ardından http://localhost:5678 üzerinden workflows/*.json dosyasını içe aktarın
 ```
 
 ---
 
 ## 🛠️ Kullanılan Teknolojiler
 
-- **LLM Orkestrasyonu & Ajanlar:** LangChain, LangGraph
+- **LLM Orkestrasyonu & Ajanlar:** LangChain, LangGraph, n8n AI Agents, Ollama (`qwen2.5:3b`)
 - **Model Kütüphaneleri & Transformers:** Hugging Face Transformers, Accelerate, PEFT (Parameter-Efficient Fine-Tuning)
 - **Derin Öğrenme Çatısı:** PyTorch
 - **Vektör Veri Tabanları & Geri Çağırma (Retrieval):** FAISS, ChromaDB
 - **Doğal Dil İşleme (NLP) & Ses:** NLTK, spaCy, Gensim, Faster-Whisper, BM25
-- **Arayüz & Dağıtım:** FastAPI, PySide6 (Windows Masaüstü), Gradio, Streamlit
+- **Arayüz, Otomasyon & Dağıtım:** FastAPI, PySide6 (Windows Masaüstü), Gradio, Streamlit, Telegram Bot API
 
 ---
 
