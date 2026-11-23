@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fiş, Fatura & Garanti Takip Ajanı (VLM + SQL + RAG)</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Üst Başlık ve Sistem Durumu -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon">AI</div>
+        <div>
+          <h1>Fiş, Fatura &amp; Garanti Takip Ajanı</h1>
+          <p class="subtitle">Hibrit Mimari: Yerel VLM + Salt-Okunur SQLite + Türkçe RAG</p>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <div id="status-badges" class="status-badges">
+          <span class="badge badge-muted">Bağlanıyor...</span>
+        </div>
+        <button id="btn-seed-demo" class="btn btn-secondary" title="Test etmek için örnek fiş ve garanti belgeleri yükle">
+          Örnek Veri Yükle
+        </button>
+        <button id="btn-open-settings" class="btn btn-outline">
+          Model Ayarları
+        </button>
+      </div>
+    </header>
+
+    <!-- Sekmeler -->
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="dashboard">Genel Bakış</button>
+      <button class="tab-btn" data-tab="upload">Belge Yükle &amp; VLM Çıkarım</button>
+      <button class="tab-btn" data-tab="documents">Belgelerim Arşivi</button>
+      <button class="tab-btn" data-tab="chat">Hibrit AI Asistan</button>
+    </nav>
+
+    <!-- 1. GENEL BAKIŞ -->
+    <main class="content">
+      <section id="tab-dashboard" class="tab-panel active">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <span class="kpi-label">Toplam Harcama</span>
+            <strong id="kpi-total-spend" class="kpi-value">0,00 TL</strong>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">Bu Ayki Harcama</span>
+            <strong id="kpi-month-spend" class="kpi-value">0,00 TL</strong>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">Kayıtlı Belge</span>
+            <strong id="kpi-doc-count" class="kpi-value">0</strong>
+          </div>
+          <div class="kpi-card kpi-alert">
+            <span class="kpi-label">30 Gün İçinde Biten Garanti</span>
+            <strong id="kpi-expiring" class="kpi-value">0</strong>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="card">
+            <h3>Kategori Bazlı Harcamalar</h3>
+            <div id="chart-categories" class="bar-list">
+              <p class="empty-msg">Henüz kayıtlı harcama yok.</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Aylık Harcama Akışı</h3>
+            <div id="chart-months" class="bar-list">
+              <p class="empty-msg">Henüz aylık veri yok.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Garanti Takip Çizelgesi</h3>
+            <span class="hint-text">Bitiş tarihine göre sıralı</span>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Mağaza / Ürün</th>
+                  <th>Alış Tarihi</th>
+                  <th>Süre</th>
+                  <th>Garanti Bitiş</th>
+                  <th>Kalan Gün</th>
+                  <th>Durum</th>
+                </tr>
+              </thead>
+              <tbody id="warranty-tbody">
+                <tr><td colspan="6" class="empty-msg">Garantili ürün kaydı yok.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. BELGE YÜKLE & VLM ÇIKARIM -->
+      <section id="tab-upload" class="tab-panel">
+        <div class="card">
+          <h3>Yeni Fiş, Fatura veya Garanti Belgesi Yükle</h3>
+          <p class="hint-text">Desteklenen formatlar: <strong>JPG, PNG, WEBP, PDF</strong> (Max 25 MB). Yükledikten sonra yapay zekânın çıkardığı alanları sağ tarafta kontrol edip onaylayabilirsiniz.</p>
+
+          <div id="dropzone" class="dropzone">
+            <input type="file" id="file-input" accept=".jpg,.jpeg,.png,.webp,.pdf" hidden />
+            <div class="dropzone-inner">
+              <p class="dropzone-title">Dosyayı buraya sürükleyin veya seçmek için tıklayın</p>
+              <button type="button" id="btn-choose-file" class="btn btn-primary">Dosya Seç</button>
+            </div>
+          </div>
+
+          <div id="extract-banner" class="banner hidden"></div>
+        </div>
+
+        <div id="preview-workspace" class="preview-workspace hidden">
+          <!-- Sol: Dosya Önizleme -->
+          <div class="card preview-pane">
+            <h4>Orijinal Belge Önizleme</h4>
+            <div id="file-preview-container" class="file-preview-box"></div>
+          </div>
+
+          <!-- Sağ: Düzenlenebilir Çıkarım Formu -->
+          <div class="card form-pane">
+            <h4>Çıkarılan Yapılandırılmış Veriler</h4>
+            <form id="extract-form" class="doc-form">
+              <input type="hidden" id="f-file-name" />
+              <input type="hidden" id="f-file-path" />
+              <input type="hidden" id="f-file-hash" />
+              <input type="hidden" id="f-mime-type" />
+              <input type="hidden" id="f-extraction-method" />
+
+              <div class="form-row">
+                <label>Belge Tipi
+                  <select id="f-document-type">
+                    <option value="fis">Fiş</option>
+                    <option value="fatura">Fatura</option>
+                    <option value="garanti_belgesi">Garanti Belgesi</option>
+                    <option value="sozlesme">Sözleşme</option>
+                    <option value="diger">Diğer</option>
+                  </select>
+                </label>
+                <label>Kategori
+                  <select id="f-category">
+                    <option value="Market">Market</option>
+                    <option value="Teknoloji">Teknoloji</option>
+                    <option value="Yemek">Yemek</option>
+                    <option value="Sağlık">Sağlık</option>
+                    <option value="Giyim">Giyim</option>
+                    <option value="Fatura">Fatura</option>
+                    <option value="Ulaşım">Ulaşım</option>
+                    <option value="Ev & Yaşam">Ev &amp; Yaşam</option>
+                    <option value="Diğer">Diğer</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="form-row">
+                <label>Mağaza / Firma Adı
+                  <input type="text" id="f-merchant-name" required />
+                </label>
+                <label>Belge Tarihi
+                  <input type="date" id="f-document-date" />
+                </label>
+              </div>
+
+              <div class="form-row three">
+                <label>Toplam Tutar
+                  <input type="number" step="0.01" id="f-total-amount" />
+                </label>
+                <label>KDV Tutarı
+                  <input type="number" step="0.01" id="f-vat-amount" />
+                </label>
+                <label>Para Birimi
+                  <select id="f-currency">
+                    <option value="TRY">TRY</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="form-row">
+                <label>Garanti Süresi (Ay)
+                  <input type="number" id="f-warranty-months" min="0" max="240" placeholder="Örn: 24" />
+                </label>
+                <label>Garanti Bitiş Tarihi (Boşsa otomatik hesaplanır)
+                  <input type="date" id="f-warranty-end-date" />
+                </label>
+              </div>
+
+              <label>Belge Özeti
+                <textarea id="f-summary" rows="2"></textarea>
+              </label>
+
+              <label>Garanti &amp; İade Şartları (RAG için indekslenir)
+                <textarea id="f-warranty-terms" rows="3"></textarea>
+              </label>
+
+              <label>Ham Metin (OCR / PDF)
+                <textarea id="f-raw-text" rows="3"></textarea>
+              </label>
+
+              <div class="items-section">
+                <div class="card-header">
+                  <h5>Ürün / Hizmet Kalemleri</h5>
+                  <button type="button" id="btn-add-item" class="btn btn-sm btn-secondary">+ Kalem Ekle</button>
+                </div>
+                <div id="items-list" class="items-list"></div>
+              </div>
+
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Onayla ve Kaydet (SQL + RAG)</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. BELGELERİM ARŞİVİ -->
+      <section id="tab-documents" class="tab-panel">
+        <div class="card">
+          <div class="filter-bar">
+            <input type="text" id="doc-search" placeholder="Mağaza, ürün veya metin ara..." />
+            <select id="doc-filter-category">
+              <option value="">Tüm Kategoriler</option>
+              <option value="Market">Market</option>
+              <option value="Teknoloji">Teknoloji</option>
+              <option value="Yemek">Yemek</option>
+              <option value="Sağlık">Sağlık</option>
+              <option value="Giyim">Giyim</option>
+              <option value="Fatura">Fatura</option>
+              <option value="Ulaşım">Ulaşım</option>
+              <option value="Ev & Yaşam">Ev &amp; Yaşam</option>
+              <option value="Diğer">Diğer</option>
+            </select>
+            <select id="doc-filter-type">
+              <option value="">Tüm Tipler</option>
+              <option value="fis">Fiş</option>
+              <option value="fatura">Fatura</option>
+              <option value="garanti_belgesi">Garanti Belgesi</option>
+              <option value="sozlesme">Sözleşme</option>
+            </select>
+            <button id="btn-refresh-docs" class="btn btn-secondary">Ara / Yenile</button>
+          </div>
+
+          <div id="documents-list" class="docs-grid">
+            <p class="empty-msg">Henüz kayıtlı belge bulunmuyor.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. HİBRİT AI ASİSTAN -->
+      <section id="tab-chat" class="tab-panel">
+        <div class="chat-layout">
+          <div class="card chat-sidebar">
+            <h4>Hızlı Örnek Sorular</h4>
+            <p class="hint-text">Sorunun tipine göre ajan otomatik olarak SQL veya RAG (ya da ikisini birden) seçer.</p>
+            <div class="quick-prompts">
+              <button class="prompt-chip" data-q="Kayıtlı tüm belgelerde toplam ne kadar harcadım ve kategori dağılımım nasıl?">
+                Toplam harcama &amp; kategori dağılımı (SQL)
+              </button>
+              <button class="prompt-chip" data-q="Garantisi 30 gün içinde dolacak ürünlerim hangileri?">
+                Yaklaşan garanti bitişleri (SQL)
+              </button>
+              <button class="prompt-chip" data-q="Kulaklık ve kahve makinesi garanti belgelerinde hangi durumlar kullanıcı hatası veya garanti dışı sayılıyor?">
+                Garanti kapsam dışı şartlar (RAG)
+              </button>
+              <button class="prompt-chip" data-q="Teknoloji kategorisinde toplam kaç TL harcadım ve bu ürünün garanti koşulları neler?">
+                Teknoloji harcaması + garanti şartları (Hybrid)
+              </button>
+            </div>
+            <hr />
+            <button id="btn-clear-chat" class="btn btn-outline full-width">Sohbet Geçmişini Temizle</button>
+          </div>
+
+          <div class="card chat-main">
+            <div id="chat-messages" class="chat-messages">
+              <div class="msg msg-assistant">
+                <div class="msg-body">
+                  Merhaba! Fişlerin, faturaların veya garanti belgelerin hakkında istediğini sorabilirsin.
+                  Sayısal soruları güvenli <strong>SQLite</strong> sorgularıyla, şart/koşul sorularını ise <strong>Türkçe RAG</strong> indeksiyle yanıtlarım.
+                </div>
+              </div>
+            </div>
+
+            <form id="chat-form" class="chat-input-bar">
+              <input type="text" id="chat-input" placeholder="Örn: Bu ay markette ne kadar harcadım? / Kulaklığın garanti şartları neler?" required />
+              <button type="submit" id="btn-send-chat" class="btn btn-primary">Gönder</button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Ayarlar Modalı -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="card-header">
+        <h3>Model &amp; Sağlayıcı Ayarları</h3>
+        <button id="btn-close-settings" class="btn btn-sm btn-outline">Kapat</button>
+      </div>
+      <div id="ollama-diagnostic" class="banner"></div>
+      <form id="settings-form" class="doc-form">
+        <div class="form-row">
+          <label>LLM Sağlayıcı (SQL / RAG / Ajan)
+            <select id="s-llm-provider">
+              <option value="ollama">Yerel Ollama</option>
+              <option value="gemini">Google Gemini API</option>
+              <option value="openai">OpenAI / Together / Uyumlu API</option>
+            </select>
+          </label>
+          <label>VLM Sağlayıcı (Görsel Okuma)
+            <select id="s-vlm-provider">
+              <option value="auto">Otomatik (Önce Yerel Ollama VLM, sonra API)</option>
+              <option value="ollama">Yalnızca Yerel Ollama</option>
+              <option value="gemini">Google Gemini API</option>
+              <option value="openai">OpenAI / Uyumlu API</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="form-row">
+          <label>Ollama Metin Modeli
+            <input type="text" id="s-ollama-llm" placeholder="qwen3:4b" />
+          </label>
+          <label>Ollama Görsel (VLM) Modeli
+            <input type="text" id="s-ollama-vlm" placeholder="qwen2.5vl:3b" />
+          </label>
+        </div>
+
+        <label>Opsiyonel Gemini API Anahtarı
+          <input type="password" id="s-gemini-key" placeholder="Değiştirmek istemiyorsanız boş bırakın" />
+        </label>
+
+        <div class="form-row">
+          <label>Opsiyonel OpenAI / Together API Anahtarı
+            <input type="password" id="s-openai-key" placeholder="Değiştirmek istemiyorsanız boş bırakın" />
+          </label>
+          <label>OpenAI Base URL
+            <input type="text" id="s-openai-url" placeholder="https://api.openai.com/v1" />
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Ayarları Uygula</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Belge Detay Modalı -->
+  <div id="doc-detail-modal" class="modal hidden">
+    <div class="modal-card modal-wide">
+      <div class="card-header">
+        <h3 id="detail-title">Belge Detayı</h3>
+        <button id="btn-close-detail" class="btn btn-sm btn-outline">Kapat</button>
+      </div>
+      <div id="detail-body" class="detail-body"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

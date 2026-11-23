@@ -43,6 +43,7 @@ Tüm projeler kendi alt klasörlerinde modüler yapısını, kaynak kodlarını 
 | 07 | **LectureMind — Video & Ders Bilgi Stüdyosu** | YouTube/web bağlantıları ve yerel ders kayıtlarından zaman damgalı transkript, semantik konu bölümleme, sınav/ödev çıkarımı ve tıklanabilir zaman damgalı Hibrit RAG Soru-Cevap web uygulaması. | FastAPI, Faster-Whisper, Sentence-Transformers, BM25, yt-dlp | [`/LectureMind`](./LectureMind) |
 | 08 | **ContextLingo — Bağlam Odaklı Masaüstü İngilizce Asistanı** | Windows'taki tüm uygulamalarda (`Alt+Q` / fare seçimi) çalışan, bağlam/deyim açıklamalı çift yönlü (EN↔TR) çeviri, ton seçmeli Yazma & Prompt Koçu (`Alt+W`), yerel Hugging Face NER, SQLite kelime defteri ve QLoRA fine-tuning şablonu. | FastAPI, PySide6, Win32 API, Transformers (NER), QLoRA/PEFT, SQLite | [`/ContextLingo`](./ContextLingo) |
 | 09 | **n8n AI & Tech Telegram Bülteni Ajanı** | Sıfır ek API maliyeti ve sıfır topluluk paketi bağımlılığı ile her gün `12:30`'da Türkiye (Google News RSS) ve küresel (Hacker News AI `points>15`) yapay zekâ haberlerini yerel Ollama (`qwen2.5:3b`) veya OpenAI (`gpt-5-nano`) ile derleyip Telegram'a gönderen otonom n8n Agent iş akışı. | n8n, Ollama (`qwen2.5:3b`), HTTP Request Tool, RSS Read, Telegram Bot API | [`/n8n-AI-News-Telegram-Agent`](./n8n-AI-News-Telegram-Agent) |
+| 10 | **ReceiptGuard AI — Fiş, Fatura & Garanti Takip Ajanı** | Fiş, fatura ve garanti belgelerini yerel VLM/PDF okuyucuyla JSON'a çeviren; sayısal/tarihsel soruları salt-okunur SQLite ile, garanti/iade şartlarını ise Türkçe SBERT RAG indeksiyle yanıtlayan hibrit FastAPI + HTML web uygulaması. | FastAPI, Ollama (`qwen3:4b`, `qwen2.5vl:3b`), Türkçe SBERT, SQLite, FAISS/NumPy | [`/ReceiptGuard-AI`](./ReceiptGuard-AI) |
 
 ---
 
@@ -98,18 +99,22 @@ python -B run_app.py
 # Örnek: n8n AI & Tech Telegram Bülteni Ajanı için n8n ve Ollama'yı Başlatma
 ollama serve
 n8n   # Ardından http://localhost:5678 üzerinden workflows/*.json dosyasını içe aktarın
+
+# Örnek: ReceiptGuard AI (Fiş, Fatura & Garanti Takip Ajanı) Web Uygulamasını Başlatma
+cd ReceiptGuard-AI
+uvicorn app:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ---
 
 ## 🛠️ Kullanılan Teknolojiler
 
-- **LLM Orkestrasyonu & Ajanlar:** LangChain, LangGraph, n8n AI Agents, Ollama (`qwen2.5:3b`)
+- **LLM Orkestrasyonu & Ajanlar:** LangChain, LangGraph, n8n AI Agents, Ollama (`qwen3:4b`, `qwen2.5:3b`, `qwen2.5vl:3b`)
 - **Model Kütüphaneleri & Transformers:** Hugging Face Transformers, Accelerate, PEFT (Parameter-Efficient Fine-Tuning)
 - **Derin Öğrenme Çatısı:** PyTorch
-- **Vektör Veri Tabanları & Geri Çağırma (Retrieval):** FAISS, ChromaDB
+- **Vektör Veri Tabanları & Geri Çağırma (Retrieval):** FAISS, ChromaDB, Türkçe SBERT
 - **Doğal Dil İşleme (NLP) & Ses:** NLTK, spaCy, Gensim, Faster-Whisper, BM25
-- **Arayüz, Otomasyon & Dağıtım:** FastAPI, PySide6 (Windows Masaüstü), Gradio, Streamlit, Telegram Bot API
+- **Arayüz, Otomasyon & Dağıtım:** FastAPI, SQLite, PySide6 (Windows Masaüstü), Gradio, Streamlit, Telegram Bot API
 
 ---
 

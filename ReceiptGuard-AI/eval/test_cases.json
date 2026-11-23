@@ -1,0 +1,38 @@
+[
+  {
+    "id": "q1_total_spend",
+    "question": "Kayıtlı tüm belgelerde toplam ne kadar harcadım?",
+    "expected_route": "sql",
+    "expected_substrings": ["14065.5", "14.065,5", "14,065.5", "14065"]
+  },
+  {
+    "id": "q2_category_tech",
+    "question": "Teknoloji kategorisinde toplam kaç TL harcadım?",
+    "expected_route": "sql",
+    "expected_substrings": ["3500", "3.500"]
+  },
+  {
+    "id": "q3_warranty_expiring",
+    "question": "Garantisi 30 gün içinde dolacak ürünlerim hangileri?",
+    "expected_route": "sql",
+    "expected_substrings": ["TeknoMarket", "SoundPro", "Kulaklık"]
+  },
+  {
+    "id": "q4_warranty_terms_liquid",
+    "question": "Kulaklık garanti belgesinde hangi durumlar kullanıcı hatası ve garanti kapsamı dışı sayılıyor?",
+    "expected_route": "rag",
+    "expected_substrings": ["sıvı", "yetkisiz", "darbe", "kırılma"]
+  },
+  {
+    "id": "q5_coffee_machine_limescale",
+    "question": "Kahve makinesi garanti şartlarında kireç çözme bakımı hakkında ne yazıyor?",
+    "expected_route": "rag",
+    "expected_substrings": ["kireç", "pompa", "garanti"]
+  },
+  {
+    "id": "q6_hybrid_tech_and_terms",
+    "question": "Teknoloji kategorisindeki harcamam toplam ne kadar ve bu ürünün garanti kapsam dışı şartları neler?",
+    "expected_route": "hybrid",
+    "expected_substrings": ["3500", "3.500", "sıvı"]
+  }
+]
