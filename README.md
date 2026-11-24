@@ -9,6 +9,8 @@
 ![LangGraph](https://img.shields.io/badge/LangGraph-Agents-purple)
 ![FastAPI](https://img.shields.io/badge/FastAPI-RAG%20Apps-009688?logo=fastapi&logoColor=white)
 ![n8n](https://img.shields.io/badge/n8n-AI%20Agents-EA4B71?logo=n8n&logoColor=white)
+![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6C5CE7)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-teal)
 
 <br/>
@@ -44,6 +46,7 @@ Tüm projeler kendi alt klasörlerinde modüler yapısını, kaynak kodlarını 
 | 08 | **ContextLingo — Bağlam Odaklı Masaüstü İngilizce Asistanı** | Windows'taki tüm uygulamalarda (`Alt+Q` / fare seçimi) çalışan, bağlam/deyim açıklamalı çift yönlü (EN↔TR) çeviri, ton seçmeli Yazma & Prompt Koçu (`Alt+W`), yerel Hugging Face NER, SQLite kelime defteri ve QLoRA fine-tuning şablonu. | FastAPI, PySide6, Win32 API, Transformers (NER), QLoRA/PEFT, SQLite | [`/ContextLingo`](./ContextLingo) |
 | 09 | **n8n AI & Tech Telegram Bülteni Ajanı** | Sıfır ek API maliyeti ve sıfır topluluk paketi bağımlılığı ile her gün `12:30`'da Türkiye (Google News RSS) ve küresel (Hacker News AI `points>15`) yapay zekâ haberlerini yerel Ollama (`qwen2.5:3b`) veya OpenAI (`gpt-5-nano`) ile derleyip Telegram'a gönderen otonom n8n Agent iş akışı. | n8n, Ollama (`qwen2.5:3b`), HTTP Request Tool, RSS Read, Telegram Bot API | [`/n8n-AI-News-Telegram-Agent`](./n8n-AI-News-Telegram-Agent) |
 | 10 | **ReceiptGuard AI — Fiş, Fatura & Garanti Takip Ajanı** | Fiş, fatura ve garanti belgelerini yerel VLM/PDF okuyucuyla JSON'a çeviren; sayısal/tarihsel soruları salt-okunur SQLite ile, garanti/iade şartlarını ise Türkçe SBERT RAG indeksiyle yanıtlayan hibrit FastAPI + HTML web uygulaması. | FastAPI, Ollama (`qwen3:4b`, `qwen2.5vl:3b`), Türkçe SBERT, SQLite, FAISS/NumPy | [`/ReceiptGuard-AI`](./ReceiptGuard-AI) |
+| 11 | **WP-PC Pilot — WhatsApp Cep PC Kumandası & Antigravity MCP Ajanı *(🚧 Geliştirilmekte)*** | Ekstra uygulama veya ücretli API olmadan WhatsApp (*Kendime Mesaj*) üzerinden Windows PC'yi (ekran, dosya/klasör gezgini, pano, ses/medya, klavye, 2 adımlı onaylı komutlar) ve Antigravity/Gemini ajanlarını yöneten çift yönlü köprü + `stdio` TypeScript MCP sunucusu. | TypeScript, Node.js, MCP SDK, Baileys, Python, Google Antigravity SDK, Gemini API | [`/WP-PC-Pilot`](./WP-PC-Pilot) |
 
 ---
 
@@ -103,18 +106,22 @@ n8n   # Ardından http://localhost:5678 üzerinden workflows/*.json dosyasını 
 # Örnek: ReceiptGuard AI (Fiş, Fatura & Garanti Takip Ajanı) Web Uygulamasını Başlatma
 cd ReceiptGuard-AI
 uvicorn app:app --host 127.0.0.1 --port 8000 --reload
+
+# Örnek: WP-PC Pilot (WhatsApp Cep PC Kumandası & MCP Sunucusu — Geliştirilmekte)
+cd WP-PC-Pilot
+npm install && npm run build && npm run start:bridge
 ```
 
 ---
 
 ## 🛠️ Kullanılan Teknolojiler
 
-- **LLM Orkestrasyonu & Ajanlar:** LangChain, LangGraph, n8n AI Agents, Ollama (`qwen3:4b`, `qwen2.5:3b`, `qwen2.5vl:3b`)
+- **LLM Orkestrasyonu & Ajanlar:** LangChain, LangGraph, MCP (Model Context Protocol), Google Antigravity SDK, n8n AI Agents, Ollama (`qwen3:4b`, `qwen2.5:3b`, `qwen2.5vl:3b`)
 - **Model Kütüphaneleri & Transformers:** Hugging Face Transformers, Accelerate, PEFT (Parameter-Efficient Fine-Tuning)
 - **Derin Öğrenme Çatısı:** PyTorch
 - **Vektör Veri Tabanları & Geri Çağırma (Retrieval):** FAISS, ChromaDB, Türkçe SBERT
 - **Doğal Dil İşleme (NLP) & Ses:** NLTK, spaCy, Gensim, Faster-Whisper, BM25
-- **Arayüz, Otomasyon & Dağıtım:** FastAPI, SQLite, PySide6 (Windows Masaüstü), Gradio, Streamlit, Telegram Bot API
+- **Arayüz, Otomasyon & Dağıtım:** FastAPI, TypeScript / Node.js, SQLite, PySide6 (Windows Masaüstü), Gradio, Streamlit, Telegram Bot API, WhatsApp (Baileys)
 
 ---
 

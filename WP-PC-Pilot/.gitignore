@@ -1,0 +1,8 @@
+node_modules/
+dist/
+auth_info/
+captures/
+.env
+agent/.venv/
+agent/__pycache__/
+*.log
