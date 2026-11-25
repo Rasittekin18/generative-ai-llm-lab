@@ -47,6 +47,7 @@ Tüm projeler kendi alt klasörlerinde modüler yapısını, kaynak kodlarını 
 | 09 | **n8n AI & Tech Telegram Bülteni Ajanı** | Sıfır ek API maliyeti ve sıfır topluluk paketi bağımlılığı ile her gün `12:30`'da Türkiye (Google News RSS) ve küresel (Hacker News AI `points>15`) yapay zekâ haberlerini yerel Ollama (`qwen2.5:3b`) veya OpenAI (`gpt-5-nano`) ile derleyip Telegram'a gönderen otonom n8n Agent iş akışı. | n8n, Ollama (`qwen2.5:3b`), HTTP Request Tool, RSS Read, Telegram Bot API | [`/n8n-AI-News-Telegram-Agent`](./n8n-AI-News-Telegram-Agent) |
 | 10 | **ReceiptGuard AI — Fiş, Fatura & Garanti Takip Ajanı** | Fiş, fatura ve garanti belgelerini yerel VLM/PDF okuyucuyla JSON'a çeviren; sayısal/tarihsel soruları salt-okunur SQLite ile, garanti/iade şartlarını ise Türkçe SBERT RAG indeksiyle yanıtlayan hibrit FastAPI + HTML web uygulaması. | FastAPI, Ollama (`qwen3:4b`, `qwen2.5vl:3b`), Türkçe SBERT, SQLite, FAISS/NumPy | [`/ReceiptGuard-AI`](./ReceiptGuard-AI) |
 | 11 | **WP-PC Pilot — WhatsApp Cep PC Kumandası & Antigravity MCP Ajanı *(🚧 Geliştirilmekte)*** | Ekstra uygulama veya ücretli API olmadan WhatsApp (*Kendime Mesaj*) üzerinden Windows PC'yi (ekran, dosya/klasör gezgini, pano, ses/medya, klavye, 2 adımlı onaylı komutlar) ve Antigravity/Gemini ajanlarını yöneten çift yönlü köprü + `stdio` TypeScript MCP sunucusu. | TypeScript, Node.js, MCP SDK, Baileys, Python, Google Antigravity SDK, Gemini API | [`/WP-PC-Pilot`](./WP-PC-Pilot) |
+| 12 | **SecondBrain Assistant — Kişisel İkinci Beyin & Öğrenme Asistanı** | YouTube videoları, web makaleleri ve düz metinlerden 3 aşamalı çoklu ajan hattıyla (`Ingestor → Gemini Synthesizer → Archivist`) Türkçe yapılandırılmış özet, aktif hatırlama tekrar kartları, uzun düzenlenmiş tam transkript, Obsidian uyumlu `.md` notları, not içi sohbet, ücretsiz YouTube RSS kanal takibi ve Telegram botu sunan FastAPI + SSE web uygulaması. | FastAPI, SSE, Google GenAI SDK (`gemini-3-flash-preview`), Pydantic v2, SQLite, `youtube-transcript-api`, `trafilatura`, Telegram Bot API | [`/SecondBrain-Assistant`](./SecondBrain-Assistant) |
 
 ---
 
@@ -110,13 +111,17 @@ uvicorn app:app --host 127.0.0.1 --port 8000 --reload
 # Örnek: WP-PC Pilot (WhatsApp Cep PC Kumandası & MCP Sunucusu — Geliştirilmekte)
 cd WP-PC-Pilot
 npm install && npm run build && npm run start:bridge
+
+# Örnek: SecondBrain Assistant (Kişisel İkinci Beyin & Öğrenme Asistanı) Başlatma
+cd SecondBrain-Assistant
+python run.py --open-browser
 ```
 
 ---
 
 ## 🛠️ Kullanılan Teknolojiler
 
-- **LLM Orkestrasyonu & Ajanlar:** LangChain, LangGraph, MCP (Model Context Protocol), Google Antigravity SDK, n8n AI Agents, Ollama (`qwen3:4b`, `qwen2.5:3b`, `qwen2.5vl:3b`)
+- **LLM Orkestrasyonu & Ajanlar:** LangChain, LangGraph, Google GenAI SDK (Gemini), Pydantic v2 Structured Outputs, MCP (Model Context Protocol), Google Antigravity SDK, n8n AI Agents, Ollama (`qwen3:4b`, `qwen2.5:3b`, `qwen2.5vl:3b`)
 - **Model Kütüphaneleri & Transformers:** Hugging Face Transformers, Accelerate, PEFT (Parameter-Efficient Fine-Tuning)
 - **Derin Öğrenme Çatısı:** PyTorch
 - **Vektör Veri Tabanları & Geri Çağırma (Retrieval):** FAISS, ChromaDB, Türkçe SBERT

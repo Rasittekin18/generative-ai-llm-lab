@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>İkinci Beyin &amp; Öğrenme Asistanı</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon">🧠</div>
+      <div>
+        <h1>İkinci Beyin &amp; Öğrenme Asistanı</h1>
+        <p class="subtitle">YouTube + Makale → Türkçe Özet, Tekrar Kartları &amp; Obsidian Markdown</p>
+      </div>
+    </div>
+    <div class="status-bar">
+      <span id="geminiPill" class="pill pill-warn">Gemini: Kontrol ediliyor...</span>
+      <span id="telegramPill" class="pill pill-muted">Telegram: Kontrol ediliyor...</span>
+      <span id="statsPill" class="pill pill-info">0 Not</span>
+      <button id="setupGuideBtn" class="btn btn-secondary btn-sm" type="button">Kurulum Rehberi</button>
+    </div>
+  </header>
+
+  <section class="pipeline-strip" aria-label="Canlı Çoklu Ajan Akışı">
+    <div class="pipeline-nodes">
+      <div id="node-ingestor" class="agent-node" data-state="idle">
+        <div class="node-header">
+          <span class="node-dot"></span>
+          <span class="node-step">1. Ajan</span>
+        </div>
+        <div class="node-title">İçerik Ajanı</div>
+        <div class="node-desc">YouTube altyazı &amp; makale çekme</div>
+      </div>
+
+      <div id="edge-1" class="agent-edge" data-state="idle">
+        <div class="edge-line"></div>
+      </div>
+
+      <div id="node-synthesizer" class="agent-node" data-state="idle">
+        <div class="node-header">
+          <span class="node-dot"></span>
+          <span class="node-step">2. Ajan</span>
+        </div>
+        <div class="node-title">Gemini Analiz Ajanı</div>
+        <div class="node-desc">Özet, aksiyon &amp; tekrar soruları</div>
+      </div>
+
+      <div id="edge-2" class="agent-edge" data-state="idle">
+        <div class="edge-line"></div>
+      </div>
+
+      <div id="node-archivist" class="agent-node" data-state="idle">
+        <div class="node-header">
+          <span class="node-dot"></span>
+          <span class="node-step">3. Ajan</span>
+        </div>
+        <div class="node-title">Obsidian Arşiv Ajanı</div>
+        <div class="node-desc">.md dosyası &amp; SQLite kaydı</div>
+      </div>
+    </div>
+    <div id="pipelineStatusText" class="pipeline-status">
+      Hazır — bir YouTube linki, makale URL'si veya metin girerek ajanları çalıştır.
+    </div>
+  </section>
+
+  <main class="layout">
+    <aside class="left-col">
+      <section class="card input-card">
+        <div class="tabs-row">
+          <button class="tab-btn active" data-input-mode="url" type="button">Link (YouTube / Makale)</button>
+          <button class="tab-btn" data-input-mode="text" type="button">Düz Metin / Not</button>
+        </div>
+
+        <form id="summarizeForm" class="form-stack">
+          <div id="urlInputGroup">
+            <label for="sourceUrl">YouTube veya Makale Linki</label>
+            <input
+              id="sourceUrl"
+              type="url"
+              placeholder="https://www.youtube.com/watch?v=... veya https://..."
+              autocomplete="off"
+            />
+          </div>
+
+          <div id="textInputGroup" class="hidden">
+            <label for="sourceTitle">Başlık (İsteğe bağlı)</label>
+            <input id="sourceTitle" type="text" placeholder="Örn: AI Agent Mimarisi Ders Notları" />
+            <label for="sourceText" class="mt-sm">Özetlenecek Metin</label>
+            <textarea
+              id="sourceText"
+              rows="5"
+              placeholder="Makale, ders notu veya transkript metnini buraya yapıştır..."
+            ></textarea>
+          </div>
+
+          <div>
+            <label for="focusInput">Özel Odak İsteği (İsteğe bağlı)</label>
+            <input
+              id="focusInput"
+              type="text"
+              placeholder="Örn: Kod örneklerine ve pratik adımlara odaklan"
+            />
+          </div>
+
+          <div class="form-actions">
+            <button id="submitBtn" class="btn btn-primary" type="submit">Ajanları Çalıştır</button>
+            <button id="sampleBtn" class="btn btn-ghost btn-sm" type="button">Örnek Doldur</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card archive-card">
+        <div class="tabs-row">
+          <button class="tab-btn active" data-side-tab="archive" type="button">Not Arşivi</button>
+          <button class="tab-btn" data-side-tab="channels" type="button">YouTube Kanalları</button>
+        </div>
+
+        <div id="archivePane">
+          <div class="filter-stack">
+            <input id="searchInput" type="search" placeholder="Başlık, özet veya etikette ara..." />
+            <div class="filter-row">
+              <select id="typeFilter" aria-label="Kaynak türü filtresi">
+                <option value="">Tüm Türler</option>
+                <option value="youtube">YouTube</option>
+                <option value="article">Makale</option>
+                <option value="text">Metin</option>
+              </select>
+              <select id="categoryFilter" aria-label="Kategori filtresi">
+                <option value="">Tüm Kategoriler</option>
+              </select>
+            </div>
+          </div>
+          <div id="notesList" class="notes-list"></div>
+        </div>
+
+        <div id="channelsPane" class="hidden">
+          <form id="channelForm" class="channel-form">
+            <input
+              id="channelInput"
+              type="text"
+              placeholder="@tuncerbyte veya kanal URL'si"
+              required
+            />
+            <button class="btn btn-secondary btn-sm" type="submit">Ekle</button>
+          </form>
+          <p class="helper-text">Takip ettiğin kanalların son videolarını ücretsiz YouTube RSS ile çekip tek tıkla özetleyebilirsin.</p>
+          <div id="channelsList" class="channels-list"></div>
+          <div id="channelVideosBox" class="channel-videos hidden">
+            <h4 id="channelVideosTitle">Son Videolar</h4>
+            <div id="channelVideosList"></div>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <section class="right-col">
+      <div id="emptyDetail" class="card empty-detail">
+        <div class="empty-icon">✨</div>
+        <h2>İkinci Beynin Hazır</h2>
+        <p>
+          Sol taraftan bir YouTube videosu veya teknik makale linki gönder. Üç ajan sırayla çalışıp
+          içeriği çeksin, Türkçe özet + tekrar soruları çıkarsın ve Obsidian uyumlu
+          <code>.md</code> dosyası olarak arşivlesin.
+        </p>
+        <div class="empty-tips">
+          <div><strong>Telegram Bağlantısı:</strong> <code>.env</code> dosyasına bot token ekleyerek telefondan tek mesajla da not kaydedebilirsin.</div>
+          <div><strong>Obsidian Entegrasyonu:</strong> <code>NOTES_DIR</code> ayarını kendi Obsidian Vault klasörüne yönlendirebilirsin.</div>
+        </div>
+      </div>
+
+      <article id="noteDetail" class="card note-detail hidden">
+        <div class="detail-header">
+          <div>
+            <div class="detail-badges">
+              <span id="detailTypeBadge" class="badge"></span>
+              <span id="detailCategoryBadge" class="badge badge-cat"></span>
+              <span id="detailReadBadge" class="badge badge-muted"></span>
+            </div>
+            <h2 id="detailTitle"></h2>
+            <p id="detailMeta" class="detail-meta"></p>
+          </div>
+          <div class="detail-actions">
+            <a id="detailSourceLink" class="btn btn-secondary btn-sm hidden" target="_blank" rel="noopener noreferrer">Kaynağa Git</a>
+            <a id="detailDownloadBtn" class="btn btn-secondary btn-sm" href="#">.md İndir</a>
+            <button id="detailDeleteBtn" class="btn btn-danger btn-sm" type="button">Sil</button>
+          </div>
+        </div>
+
+        <div id="detailTags" class="tags-row"></div>
+
+        <div class="tabs-row detail-tabs">
+          <button class="tab-btn active" data-detail-tab="summary" type="button">Özet &amp; Önemli Noktalar</button>
+          <button class="tab-btn" data-detail-tab="transcript" type="button">Düzenlenmiş Transkript</button>
+          <button class="tab-btn" data-detail-tab="flashcards" type="button">Tekrar Kartları</button>
+          <button class="tab-btn" data-detail-tab="markdown" type="button">Obsidian Markdown</button>
+          <button class="tab-btn" data-detail-tab="chat" type="button">Notla Sohbet Et</button>
+        </div>
+
+        <div id="tab-summary" class="detail-pane">
+          <div class="callout-summary">
+            <div class="callout-title">Tek Bakışta Özet (TL;DR)</div>
+            <p id="detailTldr"></p>
+          </div>
+
+          <div class="detail-block">
+            <h3>Önemli Noktalar</h3>
+            <ul id="detailKeyPoints" class="bullet-list"></ul>
+          </div>
+
+          <div id="detailSectionsWrap" class="detail-block">
+            <h3>Ayrıntılı Bölüm Özeti</h3>
+            <div id="detailSections" class="sections-grid"></div>
+          </div>
+
+          <div id="detailActionsWrap" class="detail-block">
+            <h3>Uygulanabilir Adımlar</h3>
+            <ul id="detailActionItems" class="checklist"></ul>
+          </div>
+
+          <div id="detailToolsWrap" class="detail-block">
+            <h3>Araçlar, Kütüphaneler ve Kavramlar</h3>
+            <div id="detailTools" class="chips-row"></div>
+          </div>
+        </div>
+
+        <div id="tab-transcript" class="detail-pane hidden">
+          <div class="markdown-toolbar">
+            <span id="transcriptStatsLabel" class="helper-text"></span>
+            <div style="display:flex;gap:8px;">
+              <button id="copyTranscriptBtn" class="btn btn-secondary btn-sm" type="button">Transkripti Kopyala</button>
+              <a id="downloadTranscriptBtn" class="btn btn-secondary btn-sm" href="#">Transkript .md İndir</a>
+            </div>
+          </div>
+          <div id="transcriptContent" class="transcript-prose"></div>
+        </div>
+
+        <div id="tab-flashcards" class="detail-pane hidden">
+          <div class="flashcards-toolbar">
+            <p class="helper-text">Cevabı görmek için kartın üzerine tıkla (Aktif Hatırlama).</p>
+            <button id="toggleAllCardsBtn" class="btn btn-ghost btn-sm" type="button">Tüm Cevapları Göster</button>
+          </div>
+          <div id="flashcardsGrid" class="flashcards-grid"></div>
+        </div>
+
+        <div id="tab-markdown" class="detail-pane hidden">
+          <div class="markdown-toolbar">
+            <span id="markdownPathLabel" class="helper-text"></span>
+            <button id="copyMarkdownBtn" class="btn btn-secondary btn-sm" type="button">Markdown Kopyala</button>
+          </div>
+          <pre id="markdownPreview" class="code-box"></pre>
+        </div>
+
+        <div id="tab-chat" class="detail-pane hidden">
+          <div id="chatMessages" class="chat-messages">
+            <div class="chat-msg assistant">
+              Bu notla ilgili aklına takılan bir detayı veya örnek senaryoyu sorabilirsin.
+            </div>
+          </div>
+          <form id="askForm" class="ask-form">
+            <input id="askInput" type="text" placeholder="Bu not hakkında soru sor..." required />
+            <button id="askBtn" class="btn btn-primary btn-sm" type="submit">Sor</button>
+          </form>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <div id="setupModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Ücretsiz Kurulum Rehberi</h3>
+        <button id="closeModalBtn" class="btn btn-ghost btn-sm" type="button">Kapat</button>
+      </div>
+      <div class="modal-body">
+        <ol class="guide-steps">
+          <li>
+            <strong>Ücretsiz Gemini API Anahtarı Al:</strong>
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>
+            adresinden ücretsiz anahtar oluştur ve proje klasöründeki <code>.env</code> dosyasına
+            <code>GEMINI_API_KEY=...</code> olarak ekle.
+          </li>
+          <li>
+            <strong>(Opsiyonel) Ücretsiz Telegram Botu Bağla:</strong>
+            Telegram'da <code>@BotFather</code>'a <code>/newbot</code> yaz, aldığın token'ı
+            <code>.env</code> içindeki <code>TELEGRAM_BOT_TOKEN=...</code> alanına yapıştır.
+          </li>
+          <li>
+            <strong>(Opsiyonel) Obsidian Klasörü Seç:</strong>
+            <code>.env</code> dosyasında <code>NOTES_DIR</code> yolunu doğrudan kendi Obsidian Vault klasörüne ayarlayabilirsin.
+          </li>
+          <li>
+            <strong>Sunucuyu Yeniden Başlat:</strong>
+            <code>.env</code> değişince uygulamayı kapatıp <code>baslat.bat</code> ile tekrar aç.
+          </li>
+        </ol>
+        <div id="modalPathsInfo" class="modal-paths"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
