@@ -7,7 +7,7 @@ import io
 import re
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from core.database import DatabaseManager, compute_file_hash
 from core.llm_provider import LLMRouter, ProviderError, VisionModelUnavailableError
@@ -16,6 +16,10 @@ from core.schemas import (
     ExtractionPreviewResponse,
     compute_warranty_end_date,
 )
+
+
+class InvalidDocumentError(ValueError):
+    """Bozuk, şifreli veya okunamayan dosya hatası."""
 
 
 EXTRACTION_SYSTEM_PROMPT = """Sen bir fiş, fatura, garanti belgesi ve tüketici sözleşmesi analiz asistanısın.
@@ -57,8 +61,13 @@ def _safe_filename(name: str) -> str:
 
 
 def _prepare_image_b64(raw_bytes: bytes, max_dim: int = 1600) -> tuple[str, str]:
-    """Görseli VLM için uygun boyuta getirip base64 PNG döndürür."""
-    img = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
+    """Görseli EXIF yönünü düzelterek VLM için uygun boyuta getirip base64 PNG döndürür."""
+    try:
+        img = Image.open(io.BytesIO(raw_bytes))
+        img = ImageOps.exif_transpose(img).convert("RGB")
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise InvalidDocumentError(f"Görsel dosyası açılamadı veya bozuk: {exc}") from exc
+
     if max(img.size) > max_dim:
         img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
     buf = io.BytesIO()
@@ -70,25 +79,37 @@ def _extract_pdf_text_and_images(raw_bytes: bytes, max_pages_for_vlm: int = 3) -
     """PDF içinden seçilebilir metni, metin yoksa sayfa görsellerini çıkarır."""
     import fitz  # PyMuPDF
 
-    doc = fitz.open(stream=raw_bytes, filetype="pdf")
-    texts: list[str] = []
-    for page in doc:
-        page_text = (page.get_text("text") or "").strip()
-        if page_text:
-            texts.append(page_text)
-    combined = "\n\n".join(texts).strip()
-    if len(combined) >= 60:
-        return combined, []
+    try:
+        doc = fitz.open(stream=raw_bytes, filetype="pdf")
+    except Exception as exc:
+        raise InvalidDocumentError(f"PDF dosyası açılamadı veya bozuk: {exc}") from exc
 
-    images_b64: list[str] = []
-    for idx in range(min(len(doc), max_pages_for_vlm)):
-        pix = doc[idx].get_pixmap(dpi=150)
-        b64, _ = _prepare_image_b64(pix.tobytes("png"))
-        images_b64.append(b64)
-    return combined, images_b64
+    with doc:
+        if doc.needs_pass:
+            raise InvalidDocumentError("Şifre korumalı PDF dosyaları okunamaz.")
+        if len(doc) == 0:
+            raise InvalidDocumentError("PDF dosyası boş (sayfa bulunamadı).")
+
+        texts: list[str] = []
+        for page in doc:
+            page_text = (page.get_text("text") or "").strip()
+            if page_text:
+                texts.append(page_text)
+        combined = "\n\n".join(texts).strip()
+        if len(combined) >= 60:
+            return combined, []
+
+        images_b64: list[str] = []
+        for idx in range(min(len(doc), max_pages_for_vlm)):
+            pix = doc[idx].get_pixmap(dpi=150)
+            b64, _ = _prepare_image_b64(pix.tobytes("png"))
+            images_b64.append(b64)
+        return combined, images_b64
 
 
 def _build_extracted_model(data: dict, fallback_raw_text: str = "") -> ExtractedDocument:
+    if not isinstance(data, dict):
+        data = {}
     if not data.get("raw_text") and fallback_raw_text:
         data["raw_text"] = fallback_raw_text[:6000]
     extracted = ExtractedDocument.model_validate(data)
@@ -115,6 +136,7 @@ def extract_document_preview(
     file_hash = compute_file_hash(raw_bytes)
     existing = db.find_by_hash(file_hash)
     if existing:
+        full_existing = db.get_document(int(existing["id"])) or existing
         return ExtractionPreviewResponse(
             status="duplicate",
             message=f"Bu dosya daha önce '#{existing['id']} - {existing['merchant_name']}' olarak kaydedilmiş.",
@@ -138,8 +160,22 @@ def extract_document_preview(
                 summary=existing.get("summary") or "",
                 warranty_terms=existing.get("warranty_terms") or "",
                 raw_text=existing.get("raw_text") or "",
+                items=full_existing.get("items") or [],
             ),
         )
+
+    ext = Path(file_name).suffix.lower()
+    is_pdf = ext == ".pdf" or "pdf" in (mime_type or "").lower()
+
+    pdf_text = ""
+    images_b64: list[str] = []
+    img_mime = "image/png"
+
+    if is_pdf:
+        pdf_text, images_b64 = _extract_pdf_text_and_images(raw_bytes)
+    else:
+        b64, img_mime = _prepare_image_b64(raw_bytes)
+        images_b64 = [b64]
 
     upload_dir.mkdir(parents=True, exist_ok=True)
     saved_name = f"{file_hash[:12]}_{_safe_filename(file_name)}"
@@ -147,54 +183,43 @@ def extract_document_preview(
     saved_path.write_bytes(raw_bytes)
     rel_or_abs_path = str(saved_path)
 
-    ext = Path(file_name).suffix.lower()
-    is_pdf = ext == ".pdf" or "pdf" in (mime_type or "").lower()
-
-    if is_pdf:
-        pdf_text, page_images = _extract_pdf_text_and_images(raw_bytes)
-        if len(pdf_text) >= 60:
-            try:
-                data, used_model = llm_router.chat_json(
-                    [
-                        {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
-                        {
-                            "role": "user",
-                            "content": f"Aşağıdaki PDF belgesini analiz edip JSON şemasına dönüştür:\n\n{pdf_text[:8000]}",
-                        },
-                    ]
-                )
-                extracted = _build_extracted_model(data, fallback_raw_text=pdf_text)
-                return ExtractionPreviewResponse(
-                    status="extracted",
-                    message=f"PDF metni {used_model} ile başarıyla ayrıştırıldı.",
-                    extraction_method=f"pdf+{used_model}",
-                    file_name=file_name,
-                    file_path=rel_or_abs_path,
-                    file_hash=file_hash,
-                    mime_type=mime_type or "application/pdf",
-                    extracted=extracted,
-                )
-            except ProviderError as exc:
-                return ExtractionPreviewResponse(
-                    status="needs_manual_review",
-                    message=f"PDF metni çıkarıldı ancak LLM ayrıştırması başarısız oldu ({exc}). Alanları elle kontrol edebilirsiniz.",
-                    extraction_method="pdf-raw",
-                    file_name=file_name,
-                    file_path=rel_or_abs_path,
-                    file_hash=file_hash,
-                    mime_type=mime_type or "application/pdf",
-                    extracted=ExtractedDocument(
-                        document_type="fatura",
-                        merchant_name=Path(file_name).stem,
-                        raw_text=pdf_text[:6000],
-                    ),
-                )
-        else:
-            images_b64 = page_images
-            img_mime = "image/png"
-    else:
-        b64, img_mime = _prepare_image_b64(raw_bytes)
-        images_b64 = [b64]
+    if is_pdf and len(pdf_text) >= 60:
+        try:
+            data, used_model = llm_router.chat_json(
+                [
+                    {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": f"Aşağıdaki PDF belgesini analiz edip JSON şemasına dönüştür:\n\n{pdf_text[:8000]}",
+                    },
+                ]
+            )
+            extracted = _build_extracted_model(data, fallback_raw_text=pdf_text)
+            return ExtractionPreviewResponse(
+                status="extracted",
+                message=f"PDF metni {used_model} ile başarıyla ayrıştırıldı.",
+                extraction_method=f"pdf+{used_model}",
+                file_name=file_name,
+                file_path=rel_or_abs_path,
+                file_hash=file_hash,
+                mime_type=mime_type or "application/pdf",
+                extracted=extracted,
+            )
+        except ProviderError as exc:
+            return ExtractionPreviewResponse(
+                status="needs_manual_review",
+                message=f"PDF metni çıkarıldı ancak LLM ayrıştırması başarısız oldu ({exc}). Alanları elle kontrol edebilirsiniz.",
+                extraction_method="pdf-raw",
+                file_name=file_name,
+                file_path=rel_or_abs_path,
+                file_hash=file_hash,
+                mime_type=mime_type or "application/pdf",
+                extracted=ExtractedDocument(
+                    document_type="fatura",
+                    merchant_name=Path(file_name).stem,
+                    raw_text=pdf_text[:6000],
+                ),
+            )
 
     try:
         data, used_model = llm_router.chat_vision_json(
@@ -203,7 +228,7 @@ def extract_document_preview(
             images_b64=images_b64,
             mime_type=img_mime,
         )
-        extracted = _build_extracted_model(data)
+        extracted = _build_extracted_model(data, fallback_raw_text=pdf_text)
         return ExtractionPreviewResponse(
             status="extracted",
             message=f"Görsel {used_model} VLM modeli ile başarıyla okundu.",
@@ -226,6 +251,7 @@ def extract_document_preview(
             extracted=ExtractedDocument(
                 document_type="fis",
                 merchant_name=Path(file_name).stem,
+                raw_text=pdf_text[:6000],
             ),
         )
     except ProviderError as exc:
@@ -240,5 +266,6 @@ def extract_document_preview(
             extracted=ExtractedDocument(
                 document_type="fis",
                 merchant_name=Path(file_name).stem,
+                raw_text=pdf_text[:6000],
             ),
         )

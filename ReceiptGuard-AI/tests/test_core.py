@@ -13,10 +13,11 @@ from PIL import Image
 
 from app import create_app
 from config import Settings
+from core.agent import HybridAgent
 from core.database import DatabaseManager, validate_readonly_sql
 from core.llm_provider import VisionModelUnavailableError, extract_json_object
 from core.rag_engine import RAGEngine
-from core.schemas import DocumentCreateRequest, LineItemIn, compute_warranty_end_date
+from core.schemas import DocumentCreateRequest, ExtractedDocument, LineItemIn, compute_warranty_end_date
 
 
 class FakeEmbedder:
@@ -312,3 +313,151 @@ def test_pdf_extraction_flow(temp_settings: Settings) -> None:
     assert body["status"] == "extracted"
     assert body["extracted"]["merchant_name"] == "PDF Test Mağaza"
     assert body["extracted"]["warranty_end_date"] == "2028-10-01"
+
+
+def test_extracted_document_resilient_normalization() -> None:
+    doc = ExtractedDocument.model_validate(
+        {
+            "document_type": "E-Fatura",
+            "merchant_name": "   ",
+            "document_date": "15.10.2026",
+            "currency": "TL",
+            "subtotal": "1.000,00 TL",
+            "vat_amount": "200.50",
+            "total_amount": "1.200,50 TRY",
+            "category": "teknoloji",
+            "warranty_months": "24 ay",
+            "items": [
+                {"name": "Kulaklık", "quantity": "2", "total_price": "1.200,50 TL"},
+                {"name": "  ", "quantity": 1},
+            ],
+        }
+    )
+    assert doc.document_type == "fatura"
+    assert doc.merchant_name == "Bilinmeyen Satıcı"
+    assert doc.document_date == "2026-10-15"
+    assert doc.currency == "TRY"
+    assert doc.subtotal == pytest.approx(1000.0)
+    assert doc.vat_amount == pytest.approx(200.5)
+    assert doc.total_amount == pytest.approx(1200.5)
+    assert doc.category == "Teknoloji"
+    assert doc.warranty_months == 24
+    assert len(doc.items) == 1
+    assert doc.items[0].quantity == 2.0
+
+
+def test_corrupted_upload_and_path_traversal_return_400(temp_settings: Settings) -> None:
+    app = create_app(
+        app_settings=temp_settings,
+        embedder=FakeEmbedder(),
+        llm_router=FakeLLMRouter(vision_available=True),  # type: ignore[arg-type]
+    )
+    client = TestClient(app)
+
+    bad_img = client.post(
+        "/api/documents/extract",
+        files={"file": ("bozuk.png", b"not-a-real-image", "image/png")},
+    )
+    assert bad_img.status_code == 400
+
+    bad_pdf = client.post(
+        "/api/documents/extract",
+        files={"file": ("bozuk.pdf", b"%PDF-broken", "application/pdf")},
+    )
+    assert bad_pdf.status_code == 400
+
+    bad_save = client.post(
+        "/api/documents",
+        json={
+            "file_name": "evil.png",
+            "file_path": "/etc/passwd",
+            "file_hash": "deadbeef1234",
+            "merchant_name": "Test",
+        },
+    )
+    assert bad_save.status_code == 400
+
+
+def test_document_update_csv_export_and_chat_history(temp_settings: Settings) -> None:
+    app = create_app(
+        app_settings=temp_settings,
+        embedder=FakeEmbedder(),
+        llm_router=FakeLLMRouter(vision_available=True),  # type: ignore[arg-type]
+    )
+    client = TestClient(app)
+
+    seed = client.post("/api/demo/seed")
+    assert seed.status_code == 200
+    assert seed.json()["inserted_count"] == 4
+
+    docs = client.get("/api/documents").json()["documents"]
+    target_id = docs[0]["id"]
+
+    upd = client.put(
+        f"/api/documents/{target_id}",
+        json={
+            "merchant_name": "Güncel Satıcı A.Ş.",
+            "category": "Teknoloji",
+            "document_date": "2026-01-10",
+            "warranty_months": 12,
+            "total_amount": 2500.0,
+            "items": [{"name": "Yeni Ürün", "quantity": 1, "total_price": 2500.0}],
+        },
+    )
+    assert upd.status_code == 200
+    updated_doc = upd.json()["document"]
+    assert updated_doc["merchant_name"] == "Güncel Satıcı A.Ş."
+    assert updated_doc["warranty_end_date"] == "2027-01-10"
+    assert updated_doc["items"][0]["name"] == "Yeni Ürün"
+
+    csv_res = client.get("/api/documents/export/csv")
+    assert csv_res.status_code == 200
+    assert "text/csv" in csv_res.headers["content-type"]
+    assert "Güncel Satıcı A.Ş." in csv_res.text
+
+    chat_res = client.post("/api/chat", json={"question": "Toplam harcamam kaç TL?"})
+    assert chat_res.status_code == 200
+    hist = client.get("/api/chat/history").json()["messages"]
+    assert len(hist) == 2
+    assert hist[0]["role"] == "user"
+    assert hist[1]["role"] == "assistant"
+    assert hist[1]["metadata"]["route_used"] == "sql"
+
+    clr = client.delete("/api/chat/history")
+    assert clr.status_code == 200
+    assert client.get("/api/chat/history").json()["messages"] == []
+
+
+def test_agent_sql_retry_with_quotes_and_direct_history(temp_settings: Settings) -> None:
+    class RetryQuotesLLM:
+        def __init__(self) -> None:
+            self.sql_calls = 0
+            self.last_chat_messages: list[dict[str, str]] = []
+
+        def chat_json(self, messages: list[dict[str, str]], temperature: float = 0.0) -> tuple[dict[str, Any], str]:
+            sys_prompt = messages[0]["content"]
+            if "yönlendiricisisin" in sys_prompt:
+                if "merhaba" in messages[-1]["content"].lower():
+                    return {"route": "direct", "reason": "selam"}, "fake/qwen3:4b"
+                return {"route": "sql", "reason": "sayısal"}, "fake/qwen3:4b"
+            self.sql_calls += 1
+            if self.sql_calls == 1:
+                return {"sql": 'SELECT * FROM nonexistent_table WHERE merchant_name = "Migros"'}, "fake/qwen3:4b"
+            return {"sql": "SELECT COUNT(*) AS adet FROM documents"}, "fake/qwen3:4b"
+
+        def chat(self, messages: list[dict[str, str]], json_mode: bool = False, temperature: float = 0.1) -> tuple[str, str]:
+            self.last_chat_messages = messages
+            return "Yanıt tamam.", "fake/qwen3:4b"
+
+    db = DatabaseManager(temp_settings.db_path)
+    rag = RAGEngine(temp_settings.vector_dir, FakeEmbedder())
+    llm = RetryQuotesLLM()
+    agent = HybridAgent(db=db, rag=rag, llm=llm)  # type: ignore[arg-type]
+
+    res_sql = agent.answer("Kaç belge var?")
+    assert res_sql.sql_query == "SELECT COUNT(*) AS adet FROM documents"
+    assert res_sql.sql_rows == [{"adet": 0}]
+
+    res_direct = agent.answer("Merhaba tekrar")
+    assert res_direct.route_used == "direct"
+    assert any("Kaç belge var?" in m["content"] for m in llm.last_chat_messages)

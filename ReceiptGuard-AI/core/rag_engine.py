@@ -212,6 +212,11 @@ class RAGEngine:
             self._remove_doc_locked(doc_id)
             if self.vectors is None or len(self.vectors) == 0:
                 self.vectors = new_vecs
+            elif self.vectors.shape[1] != new_vecs.shape[1]:
+                raise ValueError(
+                    f"Vektör boyutu uyuşmuyor ({self.vectors.shape[1]} != {new_vecs.shape[1]}). "
+                    "Embedding modeli değiştirildiyse mevcut vektör indeksini temizleyin."
+                )
             else:
                 self.vectors = np.vstack([self.vectors, new_vecs]).astype(np.float32)
             self.chunks.extend(new_meta)

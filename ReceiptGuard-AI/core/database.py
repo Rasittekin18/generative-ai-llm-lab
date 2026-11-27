@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Optional, Union
 
-from core.schemas import DocumentCreateRequest, compute_warranty_end_date
+from core.schemas import DocumentCreateRequest, DocumentUpdateRequest, compute_warranty_end_date
 
 
 FORBIDDEN_SQL_PATTERN = re.compile(
@@ -229,15 +231,22 @@ class DatabaseManager:
                 )
             return doc_id
 
-    def update_document(self, doc_id: int, payload: dict[str, Any]) -> bool:
+    def update_document(self, doc_id: int, payload: Union[DocumentUpdateRequest, dict[str, Any]]) -> bool:
         """Var olan belgenin alanlarını ve kalemlerini günceller."""
         doc = self.get_document(doc_id)
         if not doc:
             return False
 
-        doc_date = payload.get("document_date", doc["document_date"])
-        w_months = payload.get("warranty_months", doc["warranty_months"])
-        w_end = payload.get("warranty_end_date") or compute_warranty_end_date(doc_date, w_months)
+        data = payload.model_dump(exclude_unset=True) if isinstance(payload, DocumentUpdateRequest) else payload
+
+        doc_date = data["document_date"] if "document_date" in data else doc["document_date"]
+        w_months = data["warranty_months"] if "warranty_months" in data else doc["warranty_months"]
+        if "warranty_end_date" in data:
+            w_end = data["warranty_end_date"] or compute_warranty_end_date(doc_date, w_months)
+        elif "document_date" in data or "warranty_months" in data:
+            w_end = compute_warranty_end_date(doc_date, w_months)
+        else:
+            w_end = doc["warranty_end_date"]
 
         with self._connect() as conn:
             conn.execute(
@@ -250,24 +259,24 @@ class DatabaseManager:
                 WHERE id = ?
                 """,
                 (
-                    payload.get("document_type", doc["document_type"]),
-                    payload.get("merchant_name", doc["merchant_name"]),
+                    data.get("document_type", doc["document_type"]) if data.get("document_type") is not None else doc["document_type"],
+                    data.get("merchant_name", doc["merchant_name"]) if data.get("merchant_name") is not None else doc["merchant_name"],
                     doc_date,
-                    payload.get("currency", doc["currency"]),
-                    payload.get("subtotal", doc["subtotal"]),
-                    payload.get("vat_amount", doc["vat_amount"]),
-                    payload.get("total_amount", doc["total_amount"]),
-                    payload.get("category", doc["category"]),
+                    data.get("currency", doc["currency"]) if data.get("currency") is not None else doc["currency"],
+                    data["subtotal"] if "subtotal" in data else doc["subtotal"],
+                    data["vat_amount"] if "vat_amount" in data else doc["vat_amount"],
+                    data["total_amount"] if "total_amount" in data else doc["total_amount"],
+                    data.get("category", doc["category"]) if data.get("category") is not None else doc["category"],
                     w_months,
                     w_end,
-                    payload.get("summary", doc["summary"]),
-                    payload.get("warranty_terms", doc["warranty_terms"]),
+                    data["summary"] if "summary" in data and data["summary"] is not None else doc["summary"],
+                    data["warranty_terms"] if "warranty_terms" in data and data["warranty_terms"] is not None else doc["warranty_terms"],
                     doc_id,
                 ),
             )
-            if "items" in payload and isinstance(payload["items"], list):
+            if "items" in data and isinstance(data["items"], list):
                 conn.execute("DELETE FROM line_items WHERE document_id = ?", (doc_id,))
-                for item in payload["items"]:
+                for item in data["items"]:
                     im = item.get("warranty_months") or w_months
                     ie = (
                         item.get("warranty_end_date")
@@ -457,7 +466,7 @@ class DatabaseManager:
     def execute_safe_readonly_sql(self, sql: str, max_rows: int = 50) -> list[dict[str, Any]]:
         """Salt-okunur URI bağlantısı üzerinden doğrulanmış SELECT sorgusu çalıştırır."""
         cleaned = validate_readonly_sql(sql)
-        ro_uri = f"file:{self.db_path.resolve().as_posix()}?mode=ro"
+        ro_uri = f"{self.db_path.resolve().as_uri()}?mode=ro"
         conn = sqlite3.connect(ro_uri, uri=True)
         conn.row_factory = sqlite3.Row
         try:
@@ -466,6 +475,57 @@ class DatabaseManager:
             return [dict(r) for r in rows]
         finally:
             conn.close()
+
+    def export_documents_csv(
+        self,
+        category: Optional[str] = None,
+        document_type: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> str:
+        """Kayıtlı belgeleri UTF-8 BOM ile CSV metni olarak dışa aktarır."""
+        docs = self.list_documents(category=category, document_type=document_type, search=search)
+        buf = io.StringIO()
+        buf.write("\ufeff")
+        writer = csv.writer(buf)
+        writer.writerow([
+            "ID",
+            "Belge Tipi",
+            "Mağaza/Satıcı",
+            "Tarih",
+            "Kategori",
+            "Ara Toplam",
+            "KDV",
+            "Toplam Tutar",
+            "Para Birimi",
+            "Garanti (Ay)",
+            "Garanti Bitiş",
+            "Özet",
+            "Kalemler",
+            "Dosya Adı",
+        ])
+        for d in docs:
+            items_str = "; ".join(
+                f"{it.get('name')} x{it.get('quantity', 1)}"
+                + (f" ({it.get('total_price')})" if it.get("total_price") is not None else "")
+                for it in (d.get("items") or [])
+            )
+            writer.writerow([
+                d.get("id"),
+                d.get("document_type"),
+                d.get("merchant_name"),
+                d.get("document_date") or "",
+                d.get("category"),
+                d.get("subtotal") if d.get("subtotal") is not None else "",
+                d.get("vat_amount") if d.get("vat_amount") is not None else "",
+                d.get("total_amount") if d.get("total_amount") is not None else "",
+                d.get("currency"),
+                d.get("warranty_months") if d.get("warranty_months") is not None else "",
+                d.get("warranty_end_date") or "",
+                d.get("summary") or "",
+                items_str,
+                d.get("file_name") or "",
+            ])
+        return buf.getvalue()
 
     def append_chat_message(
         self,

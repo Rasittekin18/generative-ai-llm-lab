@@ -170,10 +170,16 @@
                 </label>
               </div>
 
-              <div class="form-row three">
+              <div class="form-row">
                 <label>Toplam Tutar
                   <input type="number" step="0.01" id="f-total-amount" />
                 </label>
+                <label>Ara Toplam
+                  <input type="number" step="0.01" id="f-subtotal" />
+                </label>
+              </div>
+
+              <div class="form-row">
                 <label>KDV Tutarı
                   <input type="number" step="0.01" id="f-vat-amount" />
                 </label>
@@ -182,6 +188,7 @@
                     <option value="TRY">TRY</option>
                     <option value="USD">USD</option>
                     <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
                   </select>
                 </label>
               </div>
@@ -246,8 +253,10 @@
               <option value="fatura">Fatura</option>
               <option value="garanti_belgesi">Garanti Belgesi</option>
               <option value="sozlesme">Sözleşme</option>
+              <option value="diger">Diğer</option>
             </select>
             <button id="btn-refresh-docs" class="btn btn-secondary">Ara / Yenile</button>
+            <button id="btn-export-csv" class="btn btn-outline" title="Filtrelenmiş belgeleri CSV olarak indir">CSV İndir</button>
           </div>
 
           <div id="documents-list" class="docs-grid">
@@ -336,18 +345,27 @@
           </label>
         </div>
 
-        <label>Opsiyonel Gemini API Anahtarı
-          <input type="password" id="s-gemini-key" placeholder="Değiştirmek istemiyorsanız boş bırakın" />
-        </label>
+        <div class="form-row">
+          <label>Opsiyonel Gemini API Anahtarı
+            <input type="password" id="s-gemini-key" placeholder="Değiştirmek istemiyorsanız boş bırakın" />
+          </label>
+          <label>Gemini Modeli
+            <input type="text" id="s-gemini-model" placeholder="gemini-2.5-flash" />
+          </label>
+        </div>
 
         <div class="form-row">
           <label>Opsiyonel OpenAI / Together API Anahtarı
             <input type="password" id="s-openai-key" placeholder="Değiştirmek istemiyorsanız boş bırakın" />
           </label>
-          <label>OpenAI Base URL
-            <input type="text" id="s-openai-url" placeholder="https://api.openai.com/v1" />
+          <label>OpenAI Modeli
+            <input type="text" id="s-openai-model" placeholder="gpt-4o-mini" />
           </label>
         </div>
+
+        <label>OpenAI Base URL
+          <input type="text" id="s-openai-url" placeholder="https://api.openai.com/v1" />
+        </label>
 
         <div class="form-actions">
           <button type="submit" class="btn btn-primary">Ayarları Uygula</button>

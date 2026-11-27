@@ -78,11 +78,33 @@ class LLMRouter:
     def check_ollama_health(self) -> dict[str, Any]:
         """Ollama sunucusunun durumunu ve yüklü modelleri döndürür."""
         base = self.settings.ollama_base_url.rstrip("/")
+        model_names: list[str] = []
+        vision_models: list[str] = []
+
         try:
             with httpx.Client(timeout=10.0, trust_env=False) as client:
                 resp = client.get(f"{base}/api/tags")
                 resp.raise_for_status()
                 data = resp.json()
+
+                models_raw = data.get("models", [])
+                for item in models_raw:
+                    name = item.get("name", "")
+                    if not name:
+                        continue
+                    model_names.append(name)
+                    is_vision = any(hint in name.lower() for hint in VISION_NAME_HINTS)
+                    if not is_vision:
+                        try:
+                            show_resp = client.post(f"{base}/api/show", json={"model": name})
+                            if show_resp.status_code == 200:
+                                caps = show_resp.json().get("capabilities", [])
+                                if isinstance(caps, list) and "vision" in caps:
+                                    is_vision = True
+                        except Exception:
+                            pass
+                    if is_vision:
+                        vision_models.append(name)
         except Exception as exc:
             return {
                 "running": False,
@@ -91,29 +113,6 @@ class LLMRouter:
                 "vision_models": [],
                 "recommended_llm": self.settings.ollama_llm_model,
             }
-
-        models_raw = data.get("models", [])
-        model_names: list[str] = []
-        vision_models: list[str] = []
-
-        with httpx.Client(timeout=10.0, trust_env=False) as client:
-            for item in models_raw:
-                name = item.get("name", "")
-                if not name:
-                    continue
-                model_names.append(name)
-                is_vision = any(hint in name.lower() for hint in VISION_NAME_HINTS)
-                if not is_vision:
-                    try:
-                        show_resp = client.post(f"{base}/api/show", json={"model": name})
-                        if show_resp.status_code == 200:
-                            caps = show_resp.json().get("capabilities", [])
-                            if isinstance(caps, list) and "vision" in caps:
-                                is_vision = True
-                    except Exception:
-                        pass
-                if is_vision:
-                    vision_models.append(name)
 
         recommended_llm = self._pick_best_ollama_llm(model_names)
         return {
@@ -151,9 +150,13 @@ class LLMRouter:
     ) -> tuple[str, str]:
         """(yanıt_metni, kullanılan_model) döndürür."""
         provider = self.settings.llm_provider.lower()
-        if provider == "gemini" and self.settings.gemini_api_key:
+        if provider == "gemini":
+            if not self.settings.gemini_api_key:
+                raise ProviderError("Gemini API anahtarı tanımlı değil. Lütfen Model Ayarları'ndan ekleyin.")
             return self._gemini_chat(messages, json_mode=json_mode, temperature=temperature)
-        if provider == "openai" and self.settings.openai_api_key:
+        if provider == "openai":
+            if not self.settings.openai_api_key:
+                raise ProviderError("OpenAI / Uyumlu API anahtarı tanımlı değil. Lütfen Model Ayarları'ndan ekleyin.")
             return self._openai_chat(messages, json_mode=json_mode, temperature=temperature)
         return self._ollama_chat(messages, json_mode=json_mode, temperature=temperature)
 
@@ -235,7 +238,7 @@ class LLMRouter:
             if health["running"]:
                 vlm_model = self._pick_ollama_vlm(health)
                 if vlm_model:
-                    messages = [
+                    messages: list[dict[str, Any]] = [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt, "images": images_b64},
                     ]
@@ -245,17 +248,39 @@ class LLMRouter:
                         temperature=0.05,
                         model_override=vlm_model,
                     )
-                    return extract_json_object(text), used
+                    try:
+                        return extract_json_object(text), used
+                    except ProviderError:
+                        retry_msgs = messages + [
+                            {"role": "assistant", "content": text},
+                            {
+                                "role": "user",
+                                "content": "Lütfen yanıtını açıklama eklemeden YALNIZCA geçerli bir JSON nesnesi olarak ver.",
+                            },
+                        ]
+                        text2, used = self._ollama_chat(
+                            retry_msgs,
+                            json_mode=True,
+                            temperature=0.0,
+                            model_override=vlm_model,
+                        )
+                        return extract_json_object(text2), used
             if vp == "ollama":
                 raise VisionModelUnavailableError(
                     f"Ollama üzerinde görsel model bulunamadı. 'ollama pull {self.settings.ollama_vlm_model}' çalıştırın."
                 )
 
-        if vp in ("auto", "gemini") and self.settings.gemini_api_key:
-            return self._gemini_vision_json(system_prompt, user_prompt, images_b64, mime_type)
+        if vp in ("auto", "gemini"):
+            if self.settings.gemini_api_key:
+                return self._gemini_vision_json(system_prompt, user_prompt, images_b64, mime_type)
+            if vp == "gemini":
+                raise VisionModelUnavailableError("Gemini API anahtarı tanımlı değil. Lütfen Model Ayarları'ndan ekleyin.")
 
-        if vp in ("auto", "openai") and self.settings.openai_api_key:
-            return self._openai_vision_json(system_prompt, user_prompt, images_b64, mime_type)
+        if vp in ("auto", "openai"):
+            if self.settings.openai_api_key:
+                return self._openai_vision_json(system_prompt, user_prompt, images_b64, mime_type)
+            if vp == "openai":
+                raise VisionModelUnavailableError("OpenAI API anahtarı tanımlı değil. Lütfen Model Ayarları'ndan ekleyin.")
 
         raise VisionModelUnavailableError(
             f"Görsel okuyabilen VLM modeli hazır değil. Yerelde 'ollama pull {self.settings.ollama_vlm_model}' "
@@ -271,20 +296,25 @@ class LLMRouter:
         json_mode: bool = False,
         temperature: float = 0.1,
     ) -> tuple[str, str]:
-        import google.generativeai as genai
+        try:
+            import google.generativeai as genai
 
-        genai.configure(api_key=self.settings.gemini_api_key)
-        system_parts = [m["content"] for m in messages if m["role"] == "system"]
-        prompt_parts = [f"{m['role'].upper()}: {m['content']}" for m in messages if m["role"] != "system"]
-        model = genai.GenerativeModel(
-            model_name=self.settings.gemini_model,
-            system_instruction="\n".join(system_parts) if system_parts else None,
-        )
-        gen_cfg: dict[str, Any] = {"temperature": temperature}
-        if json_mode:
-            gen_cfg["response_mime_type"] = "application/json"
-        resp = model.generate_content("\n\n".join(prompt_parts), generation_config=gen_cfg)
-        return (resp.text or "").strip(), f"gemini/{self.settings.gemini_model}"
+            genai.configure(api_key=self.settings.gemini_api_key)
+            system_parts = [m["content"] for m in messages if m["role"] == "system"]
+            prompt_parts = [f"{m['role'].upper()}: {m['content']}" for m in messages if m["role"] != "system"]
+            model = genai.GenerativeModel(
+                model_name=self.settings.gemini_model,
+                system_instruction="\n".join(system_parts) if system_parts else None,
+            )
+            gen_cfg: dict[str, Any] = {"temperature": temperature}
+            if json_mode:
+                gen_cfg["response_mime_type"] = "application/json"
+            resp = model.generate_content("\n\n".join(prompt_parts), generation_config=gen_cfg)
+            return (resp.text or "").strip(), f"gemini/{self.settings.gemini_model}"
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(f"Gemini API hatası ({self.settings.gemini_model}): {exc}") from exc
 
     def _gemini_vision_json(
         self,
@@ -293,22 +323,27 @@ class LLMRouter:
         images_b64: list[str],
         mime_type: str,
     ) -> tuple[dict[str, Any], str]:
-        import base64
-        import google.generativeai as genai
+        try:
+            import base64
+            import google.generativeai as genai
 
-        genai.configure(api_key=self.settings.gemini_api_key)
-        model = genai.GenerativeModel(
-            model_name=self.settings.gemini_model,
-            system_instruction=system_prompt,
-        )
-        parts: list[Any] = [user_prompt]
-        for b64 in images_b64:
-            parts.append({"mime_type": mime_type, "data": base64.b64decode(b64)})
-        resp = model.generate_content(
-            parts,
-            generation_config={"temperature": 0.05, "response_mime_type": "application/json"},
-        )
-        return extract_json_object(resp.text or ""), f"gemini/{self.settings.gemini_model}"
+            genai.configure(api_key=self.settings.gemini_api_key)
+            model = genai.GenerativeModel(
+                model_name=self.settings.gemini_model,
+                system_instruction=system_prompt,
+            )
+            parts: list[Any] = [user_prompt]
+            for b64 in images_b64:
+                parts.append({"mime_type": mime_type, "data": base64.b64decode(b64)})
+            resp = model.generate_content(
+                parts,
+                generation_config={"temperature": 0.05, "response_mime_type": "application/json"},
+            )
+            return extract_json_object(resp.text or ""), f"gemini/{self.settings.gemini_model}"
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(f"Gemini Vision API hatası ({self.settings.gemini_model}): {exc}") from exc
 
     def _openai_chat(
         self,
@@ -316,22 +351,27 @@ class LLMRouter:
         json_mode: bool = False,
         temperature: float = 0.1,
     ) -> tuple[str, str]:
-        from openai import OpenAI
+        try:
+            from openai import OpenAI
 
-        client = OpenAI(
-            api_key=self.settings.openai_api_key,
-            base_url=self.settings.openai_base_url,
-        )
-        kwargs: dict[str, Any] = {
-            "model": self.settings.openai_model,
-            "messages": messages,
-            "temperature": temperature,
-        }
-        if json_mode:
-            kwargs["response_format"] = {"type": "json_object"}
-        resp = client.chat.completions.create(**kwargs)
-        content = resp.choices[0].message.content or ""
-        return content.strip(), f"openai/{self.settings.openai_model}"
+            client = OpenAI(
+                api_key=self.settings.openai_api_key,
+                base_url=self.settings.openai_base_url,
+            )
+            kwargs: dict[str, Any] = {
+                "model": self.settings.openai_model,
+                "messages": messages,
+                "temperature": temperature,
+            }
+            if json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
+            resp = client.chat.completions.create(**kwargs)
+            content = resp.choices[0].message.content or ""
+            return content.strip(), f"openai/{self.settings.openai_model}"
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(f"OpenAI API hatası ({self.settings.openai_model}): {exc}") from exc
 
     def _openai_vision_json(
         self,
@@ -340,28 +380,33 @@ class LLMRouter:
         images_b64: list[str],
         mime_type: str,
     ) -> tuple[dict[str, Any], str]:
-        from openai import OpenAI
+        try:
+            from openai import OpenAI
 
-        client = OpenAI(
-            api_key=self.settings.openai_api_key,
-            base_url=self.settings.openai_base_url,
-        )
-        content_parts: list[dict[str, Any]] = [{"type": "text", "text": user_prompt}]
-        for b64 in images_b64:
-            content_parts.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{mime_type};base64,{b64}"},
-                }
+            client = OpenAI(
+                api_key=self.settings.openai_api_key,
+                base_url=self.settings.openai_base_url,
             )
-        resp = client.chat.completions.create(
-            model=self.settings.openai_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": content_parts},
-            ],
-            temperature=0.05,
-            response_format={"type": "json_object"},
-        )
-        text = resp.choices[0].message.content or ""
-        return extract_json_object(text), f"openai/{self.settings.openai_model}"
+            content_parts: list[dict[str, Any]] = [{"type": "text", "text": user_prompt}]
+            for b64 in images_b64:
+                content_parts.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime_type};base64,{b64}"},
+                    }
+                )
+            resp = client.chat.completions.create(
+                model=self.settings.openai_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": content_parts},
+                ],
+                temperature=0.05,
+                response_format={"type": "json_object"},
+            )
+            text = resp.choices[0].message.content or ""
+            return extract_json_object(text), f"openai/{self.settings.openai_model}"
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(f"OpenAI Vision API hatası ({self.settings.openai_model}): {exc}") from exc

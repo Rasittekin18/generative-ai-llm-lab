@@ -69,9 +69,9 @@ ReceiptGuard-AI/
 ├── static/
 │   ├── index.html           # 4 sekmeli tek sayfa web arayüzü
 │   ├── styles.css           # Koyu tema responsive tasarım
-│   └── app.js               # Önizleme, grafikler, garanti tablosu, sohbet ve XSS koruması
+│   └── app.js               # Önizleme, düzenleme modalı, grafikler, garanti tablosu, sohbet ve XSS koruması
 ├── tests/
-│   └── test_core.py         # Birim ve entegrasyon testleri (7 test)
+│   └── test_core.py         # Birim ve entegrasyon testleri (11 test)
 ├── eval/
 │   ├── test_cases.json      # Rota ve yanıt doğruluğu değerlendirme seti
 │   └── run_eval.py          # Canlı Ollama + Türkçe SBERT uçtan uca eval betiği
@@ -93,8 +93,10 @@ ReceiptGuard-AI/
 | `POST` | `/api/documents/extract` | Görsel/PDF yükler, duplicate kontrolü yapar ve düzenlenebilir önizleme üretir |
 | `POST` | `/api/documents` | Onaylanan belgeyi SQLite + RAG indeksine kaydeder |
 | `GET` | `/api/documents` | Belgeleri arama, kategori ve belge tipi filtreleriyle listeler |
+| `GET` | `/api/documents/export/csv` | Filtrelenmiş belgeleri UTF-8 BOM CSV olarak dışa aktarır |
 | `GET` / `PUT` / `DELETE` | `/api/documents/{id}` | Belge detayını alır, günceller veya SQLite + Vektör DB + diskten siler |
 | `POST` | `/api/chat` | Hibrit (SQL + RAG) ajana soru sorar; kullanılan rotayı, SQL'i ve kaynakları döndürür |
+| `GET` / `DELETE` | `/api/chat/history` | Oturum sohbet geçmişini getirir veya temizler |
 | `POST` | `/api/demo/seed` | Test için 4 adet örnek Türkçe fiş/fatura/garanti belgesi yükler |
 
 ---
@@ -156,6 +158,6 @@ python eval/run_eval.py
 Projeyi bir sonraki aşamada aşağıdaki iyileştirmelerle genişletmek planlanmaktadır:
 - [ ] **Gerçek Fiş/Fatura Görselleriyle VLM Benchmark:** `qwen2.5vl:3b` ve bulut VLM'ler üzerinde Türkçe fiş OCR doğruluk/alan bazlı F1 karşılaştırması.
 - [ ] **Taranmış Çok Sayfalı PDF Desteği & Otomatik Döndürme:** Eğik/düşük ışıklı telefon fotoğrafları için OpenCV perspektif düzeltme ve kontrast ön işleme.
-- [ ] **Proaktif Garanti Uyarıları & Dışa Aktarım:** Bitiş tarihine 30 gün kalan garantiler için e-posta/Telegram bildirimi ve aylık CSV/Excel harcama raporu dışa aktarımı.
-- [ ] **Kullanıcı Düzenleme & Satır Bazlı Garanti Takibi:** Arşiv modalında belge alanlarını doğrudan düzenleme ve aynı faturadaki farklı ürünlere bağımsız garanti süresi atama arayüzü.
+- [ ] **Proaktif Garanti Uyarıları:** Bitiş tarihine 30 gün kalan garantiler için e-posta/Telegram bildirimi. *(CSV harcama raporu dışa aktarımı eklendi)*
+- [x] **Kullanıcı Düzenleme & Satır Bazlı Garanti Takibi:** Arşiv modalında belge alanlarını doğrudan düzenleme (`PUT /api/documents/{id}`) ve kalem bazlı garanti süresi tanımlama arayüzü.
 - [ ] **Çoklu Kullanıcı / Docker Paketlemesi:** `Dockerfile` + `docker-compose.yml` ile tek komutla kurulum.

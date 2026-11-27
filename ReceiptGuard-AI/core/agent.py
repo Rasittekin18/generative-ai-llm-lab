@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from datetime import date
 from typing import Any, Optional
@@ -83,7 +84,7 @@ class HybridAgent:
         except Exception as first_err:
             # 1 kez otomatik SQL hata düzeltme denemesi
             retry_msgs = messages + [
-                {"role": "assistant", "content": f'{{"sql": "{sql}"}}'},
+                {"role": "assistant", "content": json.dumps({"sql": sql}, ensure_ascii=False)},
                 {
                     "role": "user",
                     "content": f"Bu SQL sorgusu şu hatayı verdi: {first_err}. Lütfen şemaya uygun, geçerli ve güvenli bir SELECT sorgusu olarak düzelt.",
@@ -136,6 +137,12 @@ class HybridAgent:
         if route in {"rag", "hybrid"} and not sources:
             sources = self._run_rag_tool(question, top_k=4)
 
+        recent_turns = [
+            {"role": h["role"], "content": h["content"]}
+            for h in history[:-1][-4:]
+            if h["role"] in {"user", "assistant"}
+        ]
+
         if route == "direct":
             ans_text, model_used = self.llm.chat(
                 [
@@ -143,6 +150,7 @@ class HybridAgent:
                         "role": "system",
                         "content": "Sen kişisel fiş, fatura ve garanti takip asistanısın. Kısa ve yardımcı Türkçe yanıt ver.",
                     },
+                    *recent_turns,
                     {"role": "user", "content": question},
                 ],
                 temperature=0.2,
@@ -154,7 +162,8 @@ class HybridAgent:
                 if sql_error:
                     context_blocks.append(f"SQL Hatası: {sql_error}")
                 else:
-                    context_blocks.append(f"SQL Sonuçları ({len(sql_rows)} satır):\n{sql_rows}")
+                    rows_json = json.dumps(sql_rows, ensure_ascii=False, indent=2)
+                    context_blocks.append(f"SQL Sonuçları ({len(sql_rows)} satır):\n{rows_json}")
             if sources:
                 rag_str = "\n\n".join(
                     f"[Belge #{s.document_id} | {s.merchant_name} | {s.document_date or 'Tarihsiz'} | {s.file_name} | Skor: {s.score}]\n{s.excerpt}"
@@ -162,11 +171,6 @@ class HybridAgent:
                 )
                 context_blocks.append(f"RAG Belge Parçaları:\n{rag_str}")
 
-            recent_turns = [
-                {"role": h["role"], "content": h["content"]}
-                for h in history[:-1][-4:]
-                if h["role"] in {"user", "assistant"}
-            ]
             synth_messages = [
                 {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
                 *recent_turns,

@@ -122,6 +122,8 @@ body {
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .data-table th, .data-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; }
 .data-table th { color: var(--muted); font-weight: 600; }
+.warranty-row { cursor: pointer; transition: background .12s ease; }
+.warranty-row:hover { background: rgba(59,130,246,.08); }
 
 /* Upload & Preview */
 .dropzone {

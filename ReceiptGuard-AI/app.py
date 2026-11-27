@@ -6,19 +6,20 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from config import BASE_DIR, Settings, settings as default_settings
 from core.agent import HybridAgent
 from core.database import DatabaseManager, compute_file_hash
-from core.extractor import extract_document_preview
+from core.extractor import InvalidDocumentError, extract_document_preview
 from core.llm_provider import LLMRouter, ProviderError
 from core.rag_engine import EmbedderProtocol, LocalTurkishEmbedder, RAGEngine
 from core.schemas import (
     ChatRequest,
     ChatResponse,
     DocumentCreateRequest,
+    DocumentUpdateRequest,
     ExtractionPreviewResponse,
     LineItemIn,
     RuntimeSettingsUpdate,
@@ -80,6 +81,7 @@ def create_app(
                 "ollama_vlm_model": cfg.ollama_vlm_model,
                 "embedding_model": cfg.embedding_model,
                 "has_gemini_key": bool(cfg.gemini_api_key),
+                "gemini_model": cfg.gemini_model,
                 "has_openai_key": bool(cfg.openai_api_key),
                 "openai_base_url": cfg.openai_base_url,
                 "openai_model": cfg.openai_model,
@@ -100,12 +102,14 @@ def create_app(
             cfg.llm_provider = req.llm_provider
         if req.vlm_provider is not None:
             cfg.vlm_provider = req.vlm_provider
-        if req.ollama_llm_model is not None:
+        if req.ollama_llm_model is not None and req.ollama_llm_model.strip():
             cfg.ollama_llm_model = req.ollama_llm_model.strip()
-        if req.ollama_vlm_model is not None:
+        if req.ollama_vlm_model is not None and req.ollama_vlm_model.strip():
             cfg.ollama_vlm_model = req.ollama_vlm_model.strip()
         if req.gemini_api_key is not None and req.gemini_api_key.strip():
             cfg.gemini_api_key = req.gemini_api_key.strip()
+        if req.gemini_model is not None and req.gemini_model.strip():
+            cfg.gemini_model = req.gemini_model.strip()
         if req.openai_api_key is not None and req.openai_api_key.strip():
             cfg.openai_api_key = req.openai_api_key.strip()
         if req.openai_base_url is not None and req.openai_base_url.strip():
@@ -133,17 +137,23 @@ def create_app(
         if len(raw_bytes) > MAX_FILE_BYTES:
             raise HTTPException(status_code=400, detail="Dosya boyutu 25 MB sınırını aşıyor.")
 
-        return extract_document_preview(
-            raw_bytes=raw_bytes,
-            file_name=file_name,
-            mime_type=file.content_type or "application/octet-stream",
-            upload_dir=cfg.upload_dir,
-            db=db,
-            llm_router=llm,
-        )
+        try:
+            return extract_document_preview(
+                raw_bytes=raw_bytes,
+                file_name=file_name,
+                mime_type=file.content_type or "application/octet-stream",
+                upload_dir=cfg.upload_dir,
+                db=db,
+                llm_router=llm,
+            )
+        except InvalidDocumentError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/documents")
     def save_document(req: DocumentCreateRequest) -> dict[str, Any]:
+        resolved_path = Path(req.file_path).resolve()
+        if not resolved_path.is_relative_to(cfg.upload_dir.resolve()):
+            raise HTTPException(status_code=400, detail="Geçersiz dosya yolu.")
         existing = db.find_by_hash(req.file_hash)
         if existing:
             raise HTTPException(
@@ -165,6 +175,23 @@ def create_app(
         docs = db.list_documents(category=category, document_type=document_type, search=search)
         return {"documents": docs, "count": len(docs)}
 
+    @app.get("/api/documents/export/csv")
+    def export_documents_csv(
+        category: Optional[str] = Query(default=None),
+        document_type: Optional[str] = Query(default=None),
+        search: Optional[str] = Query(default=None),
+    ) -> Response:
+        csv_content = db.export_documents_csv(
+            category=category,
+            document_type=document_type,
+            search=search,
+        )
+        return Response(
+            content=csv_content.encode("utf-8"),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="belgeler_harcamalar.csv"'},
+        )
+
     @app.get("/api/documents/{doc_id}")
     def get_document(doc_id: int) -> dict[str, Any]:
         doc = db.get_document(doc_id)
@@ -173,7 +200,7 @@ def create_app(
         return doc
 
     @app.put("/api/documents/{doc_id}")
-    def update_document(doc_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+    def update_document(doc_id: int, payload: DocumentUpdateRequest) -> dict[str, Any]:
         ok = db.update_document(doc_id, payload)
         if not ok:
             raise HTTPException(status_code=404, detail="Belge bulunamadı.")
